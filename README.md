@@ -54,12 +54,12 @@ The interplay between these components can lead to the emergence of complex beha
 Our framework draws inspiration from several areas of research:
 
 *   **Neuroscience:**
-    *   **Predictive Processing and Free Energy Principle:**  (Friston) Our uncertainty component aligns with the idea that the brain minimizes prediction errors.
-    *   **Allostasis and Homeostasis:**  Our framework incorporates both maintaining stability (energy) and proactively adapting to minimize pain.
-    *   **Interoception:** The pain signal can be seen as an interoceptive signal guiding behavior.
+    *   [**Predictive Processing and Free Energy Principle:**](https://www.nature.com/articles/nrn2787)  (Friston) Our uncertainty component aligns with the idea that the brain minimizes prediction errors.
+    *   [**Allostasis and Homeostasis:**](https://pmc.ncbi.nlm.nih.gov/articles/PMC4166604/)  Our framework incorporates both maintaining stability (energy) and proactively adapting to minimize pain.
+    *   [**Interoception:**](https://www.nature.com/articles/nrn2787) The pain signal can be seen as an interoceptive signal guiding behavior.
 *   **Machine Learning:**
     *   **Intrinsic Motivation and Curiosity-Driven Learning:** Our framework provides a specific mechanism for intrinsic rewards based on uncertainty, computation, and energy.
-    *   **Bayesian Deep Learning:** Provides tools for quantifying uncertainty.
+    *   [**Bayesian Deep Learning:**](https://www.researchgate.net/publication/232534586_Bayesian_Inference) Provides tools for quantifying uncertainty.
     *   **Resource-Aware Learning:**  Our computational load component directly addresses this.
     *   **Model-Based Reinforcement Learning:** Reducing uncertainty encourages the development of accurate environment models.
 *   **Robotics:**
