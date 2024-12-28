@@ -4,6 +4,8 @@
 
 <hr>
 
+![diagram-simplified](diagram-simplified.png)
+
 **Abstract**
 
 This document proposes a novel framework for embodied intelligence based on the concept of a "pain signal," an intrinsic drive that compels agents to maintain internal stability and minimize discomfort. We hypothesize that this pain signal, composed of uncertainty, computational load, and energy level, acts as a homeostatic imperative, guiding agents towards efficient learning, adaptive behavior, and resource management. Unlike traditional reinforcement learning approaches that rely on external rewards, our framework emphasizes an internal drive for equilibrium, drawing inspiration from biological systems. We explore the theoretical underpinnings of this hypothesis, discuss its implications for the development of autonomous agents, and outline potential avenues for future research.
