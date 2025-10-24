@@ -1,3 +1,4 @@
+from typing import List
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -431,7 +432,7 @@ class World:
             "oldest_ever_age": self.oldest_agent_ever_age,
         }
 
-    def get_render_frame(self, pixel_per_tile=15):
+    def get_render_frame(self, pixel_per_tile=50):
         """Creates a render frame with a specified pixel size per tile."""
         frame = np.kron(self.current_map, np.ones((pixel_per_tile, pixel_per_tile, 1), dtype=np.uint8))
 
@@ -443,43 +444,57 @@ class World:
         
         return frame
     
-def render_episode(world: World, episode_num: int, num_steps: int):
+def render_episode(world: World, episode_num: int, num_steps: int, timestamps: List = [], avg_ages: List = [], max_live_ages: List = [], oldest_ever_ages: List = []):
     """
-    Runs the simulation for a given number of steps and renders the output as a GIF.
+    Runs the simulation for a given number of steps and renders the output as a GIF,
+    including a side plot for population age metrics.
     """
     print(f"\n--- Starting Episode {episode_num} ---")
     
-    PIXEL_PER_TILE = 15  # Controls the size of the output GIF. 15 is a good balance.
-    fig, ax = plt.subplots(figsize=(12, 12))
-    ax.set_xticks([])
-    ax.set_yticks([])
+    PIXEL_PER_TILE = 50
     
-    # Initialize the image plot
-    im = ax.imshow(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE), animated=True)
+    # --- 1. Setup the Figure and Subplots using GridSpec for better layout control ---
+    fig = plt.figure(figsize=(30, 9))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 3], wspace=0.3)
+    
+    ax_maze = fig.add_subplot(gs[0, 0])
+    ax_plot = fig.add_subplot(gs[0, 1])
+
+    ax_maze.set_xticks([])
+    ax_maze.set_yticks([])
+    
+    # Initialize the image plot for the maze
+    im = ax_maze.imshow(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE), animated=True)
     
     # Dictionary to keep references to the text artists for agent IDs
     agent_texts = {}
 
+    ax_plot.set_title("Population Age Metrics")
+    ax_plot.set_xlabel("Timestep")
+    ax_plot.set_ylabel("Age")
+    # ax_plot.set_xscale("log")
+    line_avg, = ax_plot.plot([], [], label='Avg Age', color='cyan')
+    line_max, = ax_plot.plot([], [], label='Oldest Living', color='lime')
+    line_ever, = ax_plot.plot([], [], label='Oldest Ever', color='magenta', linestyle='--')
+    ax_plot.legend()
+    ax_plot.grid(True, alpha=0.3)
+
     def update(frame_num):
-        # Run one simulation step
+        # --- Run one simulation step ---
         world.step()
         
-        # Update the image data
+        # --- 3. Update the Maze Visualization ---
         im.set_array(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE))
         
-        # --- Update agent ID texts ---
         current_agent_ids = set(world.agents.keys())
-        
-        # Remove text for agents that have died
         dead_ids = set(agent_texts.keys()) - current_agent_ids
         for agent_id in dead_ids:
             agent_texts[agent_id].set_visible(False)
             del agent_texts[agent_id]
 
-        # Add/update text for current agents
         for agent_id, agent in world.agents.items():
-            if agent_id not in agent_texts: # New agent spawned
-                agent_texts[agent_id] = ax.text(0, 0, "", ha='center', va='center', color='black', fontsize=8, fontweight='bold')
+            if agent_id not in agent_texts:
+                agent_texts[agent_id] = ax_maze.text(0, 0, "", ha='center', va='center', color='black', fontsize=8, fontweight='bold')
             
             txt = agent_texts[agent_id]
             txt.set_text(str(agent.id))
@@ -487,35 +502,45 @@ def render_episode(world: World, episode_num: int, num_steps: int):
                               agent.y * PIXEL_PER_TILE + PIXEL_PER_TILE/2))
             txt.set_visible(True)
 
-        # Update title with metrics
         metrics = world.get_population_metrics()
-        title_text = (
-            f"Timestep: {frame_num + (episode_num - 1) * num_steps} | "
-            f"Live Agents: {len(world.agents)} | "
-            f"Avg Age: {metrics['avg_age']:.1f} | "
-            f"Oldest Living: {metrics['max_live_age']} | "
-            f"Oldest Ever (ID {metrics['oldest_ever_id']}): {metrics['oldest_ever_age']}"
-        )
-        ax.set_title(title_text, fontsize=10)
+        global_timestep = frame_num + (episode_num - 1) * num_steps
+        title_text = f"Timestep: {global_timestep} | Live Agents: {len(world.agents)}"
+        ax_maze.set_title(title_text, fontsize=12)
         
+        # --- 4. Update the Age Metrics Plot ---
+        timestamps.append(global_timestep)
+        avg_ages.append(metrics['avg_age'])
+        max_live_ages.append(metrics['max_live_age'])
+        oldest_ever_ages.append(metrics['oldest_ever_age'])
+        
+        # Update the data of the line objects
+        line_avg.set_data(timestamps, avg_ages)
+        line_max.set_data(timestamps, max_live_ages)
+        line_ever.set_data(timestamps, oldest_ever_ages)
+        
+        # Rescale the plot axes
+        ax_plot.relim()
+        ax_plot.autoscale_view()
+
         # Print progress to console
         if (frame_num + 1) % 100 == 0:
-            print(f"  Episode {episode_num}, Step {frame_num+1}/{num_steps}")
+            print(f"  Episode {episode_num}, Step {frame_num+1}/{num_steps} | "
+                  f"Oldest Ever: {metrics['oldest_ever_age']}")
 
-        return [im] + list(agent_texts.values())
+        # Return all animated artists
+        return [im] + list(agent_texts.values()) + [line_avg, line_max, line_ever]
 
-    # Create the animation
-    ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=200, blit=True, repeat=False)
+    # --- Create and Save the Animation ---
+    ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=150, blit=True, repeat=False)
     
-    # Save the animation
     output_filename = f"episode_{episode_num}.gif"
     print(f"--- Saving animation to {output_filename} ---")
-    ani.save(output_filename, writer='pillow', fps=5)
-    plt.close(fig) # IMPORTANT: Close the figure to free up memory
+    ani.save(output_filename, writer='pillow', fps=10)
+    plt.close(fig)
     print(f"--- Finished Episode {episode_num} ---")
 
+    return timestamps, avg_ages, max_live_ages, oldest_ever_ages
 
-# --- Main Simulation and Animation Setup ---
 # --- Main Simulation and Animation Setup ---
 if __name__ == "__main__":
     random.seed(42)
@@ -528,12 +553,14 @@ if __name__ == "__main__":
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 
-    TOTAL_SIMULATION_STEPS = 500
-    STEPS_PER_EPISODE = 100 # This will create animations of 1000 steps each
+    TOTAL_SIMULATION_STEPS = 10000
+    STEPS_PER_EPISODE = 1000 # This will create animations of 1000 steps each
     
     num_episodes = TOTAL_SIMULATION_STEPS // STEPS_PER_EPISODE
 
+    timestamps, avg_ages, max_live_ages, oldest_ever_ages = [], [], [], []
+
     for i in range(num_episodes):
-        render_episode(world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE)
+        timestamps, avg_ages, max_live_ages, oldest_ever_ages = render_episode(world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE, timestamps=timestamps, avg_ages=avg_ages, max_live_ages=max_live_ages, oldest_ever_ages=oldest_ever_ages)
 
     print("\n--- All episodes rendered. ---")
