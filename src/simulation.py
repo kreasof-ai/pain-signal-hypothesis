@@ -136,6 +136,9 @@ class Agent:
         self.model = AgentModel(config)
         if initial_weights:
             load_state_dict(self.model, initial_weights)
+
+            for k, v in get_state_dict(self.model).items():  
+                v.to_(Device.DEFAULT)
         self.params = get_parameters(self.model)
         for p in self.params:
             p.requires_grad = True
@@ -338,7 +341,7 @@ class World:
 
                 mutated_np = tensor.numpy() + noise_np                # tensor + noise
 
-                child_weights[name] = Tensor(mutated_np, device=Device.DEFAULT).realize()
+                child_weights[name] = Tensor(mutated_np, device="CPU").realize()
         
         initial_tile_color = tuple(self.static_map[spawn_pos])
         
