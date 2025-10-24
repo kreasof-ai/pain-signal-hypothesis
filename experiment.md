@@ -15,7 +15,7 @@ A population of agents whose primary evolutionary pressure is survival time (lon
 ![grid-world](grid_world.png)
 
 1.  **Grid World:**
-    *   **Grid Size:** 51 x 51.
+    *   **Grid Size:** 51 x 51 (include edge walls).
     *   **Procedural Generation:** The map is generated using a `MazeMapGenerator` which combines Prim's algorithm for maze creation with the addition of multiple rooms to create a complex, non-uniform space.
     *   **Tile Types:**
         *   **Wall** (Black): Impassable.
@@ -25,21 +25,21 @@ A population of agents whose primary evolutionary pressure is survival time (lon
     *   **Agent Spawning:** Agents spawn at random, valid "Floor" tile locations.
 
 2.  **Power Cell Dynamics:**
-    *   A fixed number of power cells (e.g., 50) are spawned at random "Floor" locations at the start and periodically during the simulation (e.g., 5% chance each timestep to respawn all cells).
+    *   A fixed number of power cells (e.g., 100) are spawned at random "Floor" locations at the start and periodically during the simulation (e.g., 5% chance each timestep to respawn all cells).
     *   When a power cell is collected, it provides a fixed amount of energy (e.g., 25) and is consumed (the tile turns to "Floor").
 
 **II. Agent Setup:**
 
 1.  **Architecture (`AgentModel`):**
-    *   **Encoder:** A simple CNN (2 `Conv2d` layers) that processes the `7x7` local visual perception of the agent and encodes it into a feature vector.
+    *   **Encoder:** A simple CNN (2 `Conv2d` layers) that processes the `9x9` local visual perception of the agent and encodes it into a feature vector.
     *   **Memory Processor (`ConvModel`):** A custom convolutional model using `LFM2ConvOperator` and `SwiGLU` blocks. It processes the sequence of the agent's last 31 actions.
     *   **Integration:** The encoded perception vector is concatenated with the action history embeddings before being processed by the `ConvModel` to decide the next action.
-    *   **Decoder:** A simple deconvolutional network (`ConvTranspose2d`) that attempts to predict the agent's next `7x7` perception based on its internal state.
+    *   **Decoder:** A simple deconvolutional network (`ConvTranspose2d`) that attempts to predict the agent's next `9x9` perception based on its internal state.
     *   **Action Head (`lm_head`):** A linear layer that produces logits for the 5 possible actions from the `ConvModel`'s output.
 
 2.  **Parameters:**
-    *   `perception_size`: Fixed at 7x7.
-    *   `memory_length`: Fixed at 31 previous actions.
+    *   `perception_size`: Fixed at 9x9.
+    *   `memory_length`: Fixed at 63 previous actions.
     *   Actions: 5 (up, down, left, right, idle).
     *   Learning Rate: 1e-4 (using AdamW optimizer).
 
@@ -55,7 +55,7 @@ A population of agents whose primary evolutionary pressure is survival time (lon
 The simulation employs a two-tiered learning strategy: a primary evolutionary mechanism for inter-generational learning and a secondary (currently disabled) mechanism for intra-life learning.
 
 1.  **Main Loop (Evolutionary Selection):**
-    *   **a. Action:** Each agent perceives its local `7x7` environment, processes it with its action history, and chooses an action using an epsilon-greedy policy (10% random action).
+    *   **a. Action:** Each agent perceives its local `9x9` environment, processes it with its action history, and chooses an action using an epsilon-greedy policy (10% random action).
     *   **b. Interaction:** The agent executes the action. Its energy is updated based on the tile it lands on (Wind, Power Cell) and the base cost of survival.
     *   **c. Survival Check:** The agent's life state is checked.
         *   **Death:** An agent dies if it enters a "Trap" tile or its energy level drops to zero.

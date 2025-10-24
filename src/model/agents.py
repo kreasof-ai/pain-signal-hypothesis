@@ -12,11 +12,13 @@ class Encoder:
     def __init__(self, hidden_size):
         self.c1 = Conv2d(in_channels=3, out_channels=4, kernel_size=3)
         self.c2 = Conv2d(in_channels=4, out_channels=8, kernel_size=3)
-        self.l1 = Linear(in_features=8 * 3 * 3, out_features=hidden_size)
+        self.c3 = Conv2d(in_channels=8, out_channels=16, kernel_size=3)
+        self.l1 = Linear(in_features=16 * 3 * 3, out_features=hidden_size)
 
     def __call__(self, x: Tensor) -> Tensor:
         x = self.c1(x).silu()
         x = self.c2(x).silu()
+        x = self.c3(x).silu()
 
         x = x.flatten(start_dim=1)
         x = self.l1(x)
@@ -25,17 +27,18 @@ class Encoder:
 
 class Decoder:
     def __init__(self, hidden_size):
-        self.l1 = Linear(in_features=hidden_size, out_features=8 * 3 * 3)
-        self.ct1 = ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=3)
-        self.ct2 = ConvTranspose2d(in_channels=4, out_channels=3, kernel_size=3)
+        self.l1 = Linear(in_features=hidden_size, out_features=16 * 3 * 3)
+        self.ct1 = ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=3)
+        self.ct2 = ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=3)
+        self.ct3 = ConvTranspose2d(in_channels=4, out_channels=3, kernel_size=3)
 
     def __call__(self, x: Tensor) -> Tensor:
         x = self.l1(x).silu()
-        x = x.reshape(x.shape[0], 8, 3, 3)
+        x = x.reshape(x.shape[0], 16, 3, 3)
 
         x = self.ct1(x).silu()
-        
-        x = self.ct2(x).sigmoid()
+        x = self.ct2(x).silu()
+        x = self.ct3(x).sigmoid()
         return x
 
 class SwiGLU:
@@ -77,11 +80,11 @@ class LFM2ConvOperator:
 @dataclass
 class ConvConfig:
     vocab_size: int = 5
-    hidden_size: int = 16  # n_dim
-    intermediate_size: int = 40 # FFN intermediate dim, typically 2.5 * hidden_size
-    num_hidden_layers: int = 6
+    hidden_size: int = 32  # n_dim
+    intermediate_size: int = 80 # FFN intermediate dim, typically 2.5 * hidden_size
+    num_hidden_layers: int = 8
     conv_kernel_size: int = 3
-    max_position_embeddings: int = 32
+    max_position_embeddings: int = 64
     rms_norm_eps: float = 1e-5
 
 class ConvBlock:
@@ -127,12 +130,12 @@ class AgentModel:
         self.lm_head = Linear(config.hidden_size, config.vocab_size, bias=False)
 
     def __call__(self, input: Tensor, memory: Tensor):
-        perception = self.encoder(input) # encodes perception from current surrounding 7x7 tiles
+        perception = self.encoder(input) # encodes perception from current surrounding 9x9 tiles
         h = self.embed_tokens(memory) # encode action histories into embedding
         bsz, seq_len, dim = h.shape
 
         assert bsz == 1 # only support single batch size for single agent
-        assert seq_len == 31 # memory length should be 31, if action histories less than 31 the earlier is filled with idle action
+        assert seq_len == 63 # memory length should be 63, if action histories less than 63 the earlier is filled with idle action
 
         perception = perception.reshape(bsz, 1, dim)
 
@@ -142,7 +145,7 @@ class AgentModel:
 
         action_hidden_states = hidden_states[:, -1, :]
 
-        prediction = self.decoder(perception + action_hidden_states) # Next 7x7 tiles prediction based on potential chosen action
+        prediction = self.decoder(perception + action_hidden_states) # Next 9x9 tiles prediction based on potential chosen action
 
         logits = self.lm_head(hidden_states)
         
@@ -154,9 +157,9 @@ if __name__ == "__main__":
     # --- 1. Setup Model and Optimizer ---
     config = ConvConfig(
         vocab_size=5, # 5 actions: up, down, left, right, idle
-        hidden_size=16,
-        intermediate_size=40,
-        num_hidden_layers=6,
+        hidden_size=32,
+        intermediate_size=80,
+        num_hidden_layers=8,
         conv_kernel_size=3,
     )
 

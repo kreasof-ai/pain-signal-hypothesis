@@ -4,6 +4,7 @@ import random
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
+import gc
 
 from tinygrad import Tensor, Device, dtypes, TinyJit
 from tinygrad.nn.state import get_parameters, get_state_dict, load_state_dict
@@ -141,25 +142,25 @@ class Agent:
         self.optimizer = AdamW(self.params, lr=1e-4)
         
         # 0:up, 1:down, 2:left, 3:right, 4:idle
-        self.action_history = deque([4] * 31, maxlen=31) 
+        self.action_history = deque([4] * 63, maxlen=63) 
         self.last_pain_signal = self.calculate_pain_signal(initial_tile_color, None, hit_a_wall=False)
 
         r, g, b = 255, random.randint(100, 200), 0
         self.color = (r, g, b)
 
     def get_perception(self, world_map: np.ndarray) -> Tensor:
-        """Extracts the 7x7 view around the agent."""
+        """Extracts the 9x9 view around the agent."""
         h, w, _ = world_map.shape
-        view = np.full((7, 7, 3), COLORS["WALL"], dtype=np.uint8) # Pad with walls
+        view = np.full((9, 9, 3), COLORS["WALL"], dtype=np.uint8) # Pad with walls
         
-        y_start, x_start = self.y - 3, self.x - 3
-        y_end, x_end = self.y + 4, self.x + 4
+        y_start, x_start = self.y - 4, self.x - 4
+        y_end, x_end = self.y + 5, self.x + 5
         
         # Calculate slices for world and view to handle boundaries
         world_y_slice = slice(max(0, y_start), min(h, y_end))
         world_x_slice = slice(max(0, x_start), min(w, x_end))
-        view_y_slice = slice(max(0, -y_start), 7 - max(0, y_end - h))
-        view_x_slice = slice(max(0, -x_start), 7 - max(0, x_end - w))
+        view_y_slice = slice(max(0, -y_start), 9 - max(0, y_end - h))
+        view_x_slice = slice(max(0, -x_start), 9 - max(0, x_end - w))
 
         view[view_y_slice, view_x_slice] = world_map[world_y_slice, world_x_slice]
         
@@ -192,18 +193,11 @@ class Agent:
         return (w_energy * pain_energy) + (w_comp * pain_comp)
     
     @TinyJit
-    def _inference(self, perception_tensor: Tensor, memory_tensor: Tensor) -> int:
+    def _inference(self, perception_tensor: Tensor, memory_tensor: Tensor) -> Tensor:
+
         output = self.model(perception_tensor, memory_tensor)
         logits = output["logits"].realize()
-                
-        # Get action from the last timestep's logits
-        action_logits = logits[0, -1, :]
-
-        probs = (action_logits / 1.0).softmax()
-    
-        action_idx = (probs.cumsum() > Tensor.uniform(1).item()).argmax().numpy().item()
-
-        return action_idx
+        return logits
 
     def choose_action(self, perception_tensor: Tensor) -> int:
         """Uses the model to decide the next action with decaying epsilon-greedy exploration."""
@@ -216,8 +210,15 @@ class Agent:
             # EXPLORE: Choose a random action
             action_idx = random.randint(0, self.config.vocab_size - 1)
         else:
+            val_np = np.random.uniform(low=0.0, high=1.0)
+            t = Tensor(val_np)
             memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32)
-            action_idx = self._inference(perception_tensor, memory_tensor)
+            logits = self._inference(perception_tensor, memory_tensor)
+
+            action_logits = logits[0, -1, :]
+
+            probs = (action_logits / 1.0).softmax()
+            action_idx = (probs.cumsum() > t.item()).argmax().numpy().item()
 
         return action_idx
 
@@ -333,13 +334,11 @@ class World:
         if parent_weights:
             child_weights = {}
             for name, tensor in parent_weights.items():
-                # Detach the parent tensor from its computational graph by creating a new tensor from its numpy representation.
-                # This prevents the recursion error by stopping the graph from growing across generations.
-                detached_tensor = Tensor(tensor.numpy(), device=Device.DEFAULT)
+                noise_np = np.random.randn(*tensor.shape).astype(np.float32) * 0.01   # σ = 0.01
 
-                # Add Gaussian noise for mutation to the clean tensor
-                noise = Tensor.randn(*detached_tensor.shape, device=Device.DEFAULT) * 0.01 # Small mutation
-                child_weights[name] = (detached_tensor + noise).realize()
+                mutated_np = tensor.numpy() + noise_np                # tensor + noise
+
+                child_weights[name] = Tensor(mutated_np, device=Device.DEFAULT).realize()
         
         initial_tile_color = tuple(self.static_map[spawn_pos])
         
@@ -432,6 +431,8 @@ class World:
                 agent.is_alive = False
                 print(f"Agent {agent.id} ran out of energy and died.")
                 agents_to_remove.append(agent_id)
+
+            gc.collect()
                 
         if agents_to_remove:
             surviving_agents = [a for a in self.agents.values() if a.is_alive]
@@ -463,9 +464,13 @@ class World:
                 # Respawn a new agent, inheriting from the best survivor
                 self.spawn_agent(parent_weights=parent_weights)
                 del self.agents[agent_id] # Remove the old agent from the dictionary
+
+            gc.collect()
             
         if random.random() < 0.05: # 5% chance each step to respawn all cells
             self.spawn_power_cells()
+
+        gc.collect()
 
     def get_population_metrics(self):
         """Calculates and returns key metrics about the agent population."""
@@ -534,6 +539,9 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
     ax_plot.grid(True, alpha=0.3)
 
     def update(frame_num):
+        global_timestep = frame_num + (episode_num - 1) * num_steps
+        print(f"    Global Timesteps: {global_timestep}")
+
         # --- Run one simulation step ---
         world.step()
         
@@ -557,7 +565,6 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
             txt.set_visible(True)
 
         metrics = world.get_population_metrics()
-        global_timestep = frame_num + (episode_num - 1) * num_steps
         title_text = f"Timestep: {global_timestep} | Live Agents: {len(world.agents)}"
         ax_maze.set_title(title_text, fontsize=12)
         
@@ -602,7 +609,7 @@ if __name__ == "__main__":
 
     GRID_WIDTH = 51 
     GRID_HEIGHT = 51
-    NUM_AGENTS = 12
+    NUM_AGENTS = 20
     NUM_POWER_CELLS = 100
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
