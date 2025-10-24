@@ -4,6 +4,8 @@
 
 <hr>
 
+<img width="1797" height="900" alt="Screenshot 2025-10-24 105843" src="https://github.com/user-attachments/assets/6b063daa-c71d-4eb5-89f0-33a5614284e3" />
+
 > Our work has significant overlap with philosophical, computational, and neuroscience discussions from Aapo Hyvärinen called [Painful intelligence: What AI can tell us about human suffering](https://arxiv.org/abs/2205.15409)
 
 **Abstract**
