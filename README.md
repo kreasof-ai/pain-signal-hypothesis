@@ -1,10 +1,8 @@
-<h1 align="center">The Homeostatic Imperative in Embodied Intelligence: A Pain Signal Hypothesis</h1>
-
-<h3 align="center"><a href="https://kreasof.my.id/" style="color: #2088FF;">Kreasof AI</a></h3>
-
-<hr>
+# The Homeostatic Imperative in Embodied Intelligence: A Pain Signal Hypothesis 
 
 <img width="1797" height="900" alt="Screenshot 2025-10-24 105843" src="https://github.com/user-attachments/assets/6b063daa-c71d-4eb5-89f0-33a5614284e3" />
+
+---
 
 > Our work has significant overlap with philosophical, computational, and neuroscience discussions from Aapo Hyvärinen called [Painful intelligence: What AI can tell us about human suffering](https://arxiv.org/abs/2205.15409)
 
