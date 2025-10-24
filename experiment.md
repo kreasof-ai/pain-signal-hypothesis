@@ -12,7 +12,7 @@ An agent that seeks to minimize its pain signal will exhibit emergent behaviors 
 
 **I. Environment Setup:**
 
-![grid-world](grid-world.png)
+![grid-world](Agent Simulation.mp4)
 
 1. **Grid World:**
     *   Define grid size: 17 x 17.
