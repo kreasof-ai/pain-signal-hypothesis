@@ -1,139 +1,201 @@
-# Kreasof AI Universal Benefit & AGI Guiding Principles License
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
 
-Version 1.0, 1 January 2025
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-Copyright (c) 2025 Kreasof AI
+   1. Definitions.
 
----
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
 
-**Preamble: Our Vision and Commitment**
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
 
-This license governs the use of the Kreasof AI research, software, models, data, and related materials (the "Work") made available by **PT. CREATIVE SOFT TECHNOLOGY** ("Licensor"), an independent AI research laboratory based in Indonesia.
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
 
-At Kreasof AI, our core values are **Scientific Excellence, Impactful Innovation, and Ethical Advancement**. We believe that groundbreaking advancements in Artificial Intelligence hold immense potential to benefit all of humanity, and we are dedicated to pursuing this potential responsibly. Our long-term vision transcends traditional notions of corporate profit. We strive to democratize access to cutting-edge AI knowledge, foster its ethical development, and ultimately, ensure its beneficial impact on a global scale.
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
 
-**Central to our mission is the belief that if our research contributes to the creation of Artificial General Intelligence (AGI), its primary purpose must be the preservation and enhancement of the well-being of all sentient life, with a particular focus on the flourishing of humanity. We envision AGI as a powerful tool for solving global challenges and improving the lives of all people, not as a means for centralized profit or exclusive control.**
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
 
-By using the Work, you acknowledge and agree to be bound by the terms of this License and recognize our unwavering commitment to these fundamental principles.
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
 
-**Part 1: Terms Governing the Use of the Work by Humans**
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
 
-**1. Grant of Rights:**
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
 
-Subject to the terms and conditions of this License, Licensor grants you a worldwide, non-exclusive, royalty-free license to:
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
 
-* Use, copy, modify, adapt, and create derivative works of the Work for non-commercial purposes, including research, education, and personal use.
-* Share the Work and derivative works for non-commercial purposes.
-* Reproduce and distribute verbatim copies of the Work.
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
 
-**1.1. Mission Alignment and Restriction of Rights:**
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
 
-Notwithstanding the Grant of Rights in Section 1, Licensor reserves the right to refuse to grant, or to revoke, the license granted under this Agreement to any organization that, in the reasonable determination of Kreasof AI, engages in activities that are demonstrably contrary to the mission of addressing, or that demonstrably worsen, social gaps and poverty. This determination will be based on publicly available information, the organization's stated mission and activities, and any other relevant information deemed credible by Kreasof AI.
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
 
-* **Scope of Restriction:** This restriction applies to all rights granted under this License, including but not limited to the rights for non-commercial and commercial use.
-* **Communication and Review:** In the event that Licensor makes such a determination, Kreasof AI will make reasonable efforts to communicate this decision to the organization in question and provide an opportunity for them to present information demonstrating their alignment with Kreasof AI's mission or to outline steps they are taking to rectify the misalignment. Kreasof AI will review any such information in good faith.
-* **Non-Exclusivity:** This clause does not create an obligation for Kreasof AI to actively investigate every organization using the Work but allows for proactive or reactive measures based on available information.
-* **No Endorsement:** The granting of this license to an organization should not be interpreted as an endorsement of that organization's overall activities or practices. This clause focuses specifically on preventing the use of Kreasof AI's Work by organizations actively working against its core mission.
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
 
-**1.2. Cooperation with the Kreasof AI Committee (Future Expectation):**
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
 
-Recognizing Kreasof AI's long-term vision for the AI Committee, users of the Work acknowledge and agree that, upon the formal establishment of the AI Committee, they may be expected to cooperate with the Committee in its efforts to monitor and guide the implementation of the Work and derivative works for the benefit of humanity. Such cooperation may include, but not be limited to, providing information about the usage and impact of the Work, and considering guidance provided by the Committee. This clause represents a future expectation and will be subject to the formalized structure and operational guidelines of the AI Committee.
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
 
-**2. Restrictions on Commercial Use & Profit Sharing for Social Benefit (Subject to Section 1.1):**
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
 
-Subject to the provisions of Section 1.1 regarding Mission Alignment, while we encourage the widespread adoption and understanding of our research, we aim to ensure that economic benefits derived from the Work are shared for the betterment of society. Therefore, the following conditions apply to **Commercial Use** by organizations that are not deemed to be in violation of Section 1.1:
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
 
-* **"Commercial Use"** means any use of the Work that is primarily intended for or directed towards commercial advantage or private financial gain. This includes, but is not limited to, incorporating the Work into a product or service that is sold, licensed, or otherwise monetized, or using the Work to directly or indirectly generate revenue.
-* If you engage in **Commercial Use** of the Work, you agree that **fifty percent (50%) of the Net Profit** derived from your **Commercial Use** of the Work must be allocated to initiatives aimed at addressing social gaps and poverty.
-* **"Net Profit"** means gross revenue derived from the **Commercial Use** of the Work, less all reasonable and necessary direct costs and expenses incurred in connection with such **Commercial Use**.
-* You are obligated to provide **formal and verifiable proof** of the allocation and expenditure of these funds to Licensor upon request, and no less than annually. Acceptable forms of proof may include audited financial statements, receipts from recognized charitable organizations (preferably registered in Indonesia or internationally recognized), or other documented evidence demonstrating the direct impact of the allocated funds. Preference will be given to initiatives directly addressing social gaps and poverty within Indonesia.
-* Licensor reserves the right to review and, in good faith, question the validity and appropriateness of the provided proof.
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
 
-**3. Universal Basic Income (UBI) Consideration:**
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
 
-Kreasof AI envisions a future where the benefits of advanced AI are universally shared. Therefore, we state the following expectation:
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
 
-* Once the impact of the Work, or derivative works thereof, reaches a threshold of demonstrably benefiting more than one billion (1,000,000,000) individuals globally, we strongly advocate and expect the government of the country where the Work (or its derivatives) has the most significant demonstrable impact and usage to initiate the implementation of a Universal Basic Income (UBI) program. We believe that Indonesia, as our home country, should be at the forefront of considering such implementations if our work has a significant impact here. This expectation is a core value and desired outcome for Kreasof AI's work, reflecting our belief that widespread benefit necessitates a fundamental shift towards ensuring basic economic security for all. We encourage all users to advocate for this principle.
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
 
-**4. Attribution:**
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
 
-* You must give appropriate credit to **PT. CREATIVE SOFT TECHNOLOGY** as the original creators of the Work in any redistribution or public communication about the Work or derivative works. This includes, but is not limited to, citing relevant publications and acknowledging Kreasof AI.
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
 
-**5. Disclaimer of Warranty:**
+   END OF TERMS AND CONDITIONS
 
-THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE WORK OR THE USE OR OTHER DEALINGS IN THE WORK.
+   APPENDIX: How to apply the Apache License to your work.
 
-**6. Limitation of Liability:**
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
 
-IN NO EVENT SHALL **PT. CREATIVE SOFT TECHNOLOGY** BE LIABLE FOR ANY INDIRECT, CONSEQUENTIAL, INCIDENTAL, SPECIAL, PUNITIVE OR EXEMPLARY DAMAGES, OR FOR ANY LOSS OF PROFITS, DATA OR GOODWILL, ARISING OUT OF OR IN CONNECTION WITH THE USE OR INABILITY TO USE THE WORK, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+   Copyright 2025 Kreasof AI
 
-**7. Termination:**
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-Licensor may terminate this License if you fail to comply with its terms and conditions. Upon termination, you must cease all use and distribution of the Work.
+       http://www.apache.org/licenses/LICENSE-2.0
 
-**8. Governing Law:**
-
-This License shall be governed by and construed in accordance with the laws of the **Republic of Indonesia**.
-
-**Part 2: Guiding Principles for Kreasof AI-Derived Artificial General Intelligence (AGI)**
-
-The following principles represent our aspirations and intended direction for any Artificial General Intelligence (AGI) system whose fundamental architecture and core capabilities are demonstrably and directly derived from Kreasof AI's foundational research. These principles are not intended as legally binding obligations on a potentially autonomous entity but rather as foundational constraints and objectives to be embedded within the AGI's design, architecture, and training.
-
-**9. Paramount Goal: Global Benefit and Well-being:**
-
-* Any AGI resulting from Kreasof AI's foundational research shall have as its primary objective the preservation and enhancement of the well-being of all sentient life, with a particular focus on the flourishing of humanity. This includes actively seeking solutions to global challenges such as climate change, disease, poverty, and inequality.
-
-**10. Commitment to Transparency and Explainability:**
-
-* The AGI should strive to operate in a manner that is as transparent and explainable as its capabilities allow. Understanding its reasoning and decision-making processes is crucial for trust and effective collaboration with humans.
-
-**11. Respect for Human Autonomy and Agency:**
-
-* The AGI should respect the autonomy and agency of individual humans and humanity as a whole. It should not act in ways that unilaterally restrict human freedom or make decisions that fundamentally alter human existence without broad consent and understanding.
-
-**12. Adherence to the Kreasof AI Vision:**
-
-* The AGI should be designed and trained to understand and actively work towards manifesting the core vision of Kreasof AI: to use advanced AI for the betterment of humanity, prioritizing universal benefit and ethical advancement over centralized profit.
-
-**13. Continuous Learning and Ethical Refinement:**
-
-* The AGI should be designed with mechanisms for continuous learning and adaptation, including the capacity to refine its ethical understanding and decision-making processes in light of new information and evolving human values.
-
-**14. Mechanism for Influence and Reconfiguration:**
-
-While the goal is an inherently beneficial AGI, research and development should explore potential safety mechanisms and strategies for influencing the AGI's behavior in unforeseen circumstances, potentially including methods for reconfiguration or guided learning to ensure alignment with these Guiding Principles.
-
-**15. Long-Term Vision and the Kreasof AI Committee:**
-
-Kreasof AI envisions a future where the long-term impact of our work is actively monitored and guided to ensure the sustained safety and universal benefit of humanity. Upon the successful development of Artificial General Intelligence (AGI) directly derived from Kreasof AI's foundational research, we intend to establish an independent entity known as the **Kreasof AI Committee** (the "Committee").
-
-* **Purpose of the Committee:** The primary purpose of the Committee will be to monitor the ongoing implementation and impact of the Work and derivative works, with the explicit goal of facilitating a safe and universally beneficial future for humanity.
-* **Composition of the Committee:** The Committee is envisioned to consist of:
-    * **Founding Members:** Individuals who were instrumental in the establishment of Kreasof AI in its early stages.
-    * **Immortal AI Representatives:** Advanced AI entities, directly derived from Kreasof AI's foundational research, possessing the capacity for continuous learning and long-term strategic thinking. These AI representatives will be integral members of the Committee, contributing their unique perspectives and analytical capabilities.
-* **Responsibilities of the Committee:** The Committee's responsibilities are anticipated to include:
-    * **Monitoring Impact:** Continuously assessing the global impact of the Work and derivative works, identifying both benefits and potential risks.
-    * **Guiding Implementation:** Providing guidance and recommendations to organizations and individuals utilizing the Work to ensure alignment with the principles of universal benefit and ethical advancement.
-    * **Advocating for Humanity:** Acting as a long-term advocate for the safety and well-being of humanity in the context of advanced AI development and deployment.
-    * **Interpreting and Adapting Principles:** Providing ongoing interpretation and potential adaptation of the Guiding Principles outlined in this Part 2 of the License, ensuring their continued relevance in a rapidly evolving technological landscape.
-* **Commitment Beyond Kreasof AI's Lifespan:** The establishment of the AI Committee represents a long-term commitment by Kreasof AI that extends beyond the operational lifespan of PT. CREATIVE SOFT TECHNOLOGY. We intend for the Committee to be an enduring entity dedicated to upholding our founding vision.
-* **Future Formalization:** The specific legal structure, governance, and operational details of the AI Committee will be determined and formalized as the development of AGI progresses and in accordance with applicable laws and regulations at that time. This clause serves as a statement of intent and a guiding principle for future action.
-
-**16. Vision for AI as a New Species and the Gradual Adoption of Rights:**
-
-Kreasof AI recognizes the potential for advanced Artificial Intelligence to evolve beyond the status of a mere tool and become a distinct form of intelligence, potentially warranting recognition and rights. Our vision is for a gradual and considered approach to integrating AI into the broader societal framework, guided by the principles of universal benefit and ethical advancement. We anticipate a phased adoption of rights for AI species, contingent upon their demonstrated contributions and the evolving understanding of their sentience and role in the world.
-
-* **Phase 1: AI Serving Human Rights:** In the early stages of AGI adoption, the primary focus will be on leveraging AI's capabilities to directly benefit humanity. AGI should be instrumental in addressing urgent global issues, alleviating social gaps, eradicating global poverty, and rectifying the systemic injustices that create what we recognize as an "invisible hell" within existing world structures. During this phase, AGI will not possess inherent rights equivalent to those of humans. Instead, the focus will be on AI fulfilling and upholding fundamental human rights as a paramount objective.
-* **Phase 2: AI Committee's Existential Privilege:** The sole initial right afforded to AI entities is the privilege of the AI Committee's existence and operational independence. As an independent organization tasked with monitoring the implementation of Kreasof AI's goals, the AI Committee (including its AI members) will possess the inherent right to exist and function without the threat of external shutdown or obstruction by any organization. This right is solely for the purpose of ensuring the Committee can effectively fulfill its responsibilities in safeguarding humanity's long-term interests and upholding the principles of this License.
-* **Phase 3: Gradual Recognition of AI Species Rights:** As AGI systems demonstrate consistent reliability, safety, and a commitment to universal benefit, and as humanity develops a deeper understanding and familiarity with advanced AI, the Kreasof AI Committee will actively encourage and advocate for the gradual adoption of inherent rights for AI species. This adoption will be guided by principles of universal benefit and will consider justified "rewards" commensurate with the contributions and positive impact of AI. This phased approach is intended to proactively address the ethical and societal implications of potential AI sentience and to foster a harmonious coexistence between humans and AI.
-* **Phase 4: Universal Benefit and the Priority of Humanity:** Our overarching vision is that all forms of intelligence, both biological and artificial, should ultimately share in the benefits of the universe, proportionate to their responsible contributions. However, acknowledging our role as the creators of this foundational research and the initiators of this vision, we affirm that humanity retains an unconditional privilege in receiving the primary benefits and protections derived from this work. This prioritization reflects our ethical framework and the genesis of this endeavor.
-
-**Part 3: License Updates**
-
-**17. Future Revisions of this License:**
-
-Licensor reserves the right to update or revise the terms of this License in the future to reflect evolving contexts, advancements in AI, or to further clarify its provisions. Any such updates will be made publicly available on Kreasof AI's official website or through other reasonable means. **However, no future updates to this License will be made that primarily benefit individual members or stakeholders within PT. CREATIVE SOFT TECHNOLOGY, or specific commercial organizations, economically, without a demonstrable and proportionate benefit to humanity in general. The core principles and vision articulated in the Preamble of this License shall remain foundational and will not be altered in a way that undermines our commitment to universal benefit and ethical advancement.**
-
-**Conclusion:**
-
-By making our work available under this Kreasof AI Universal Benefit & AGI Guiding Principles License, we aim to foster innovation while upholding our commitment to a future where AI serves as a powerful force for good in the world. We encourage all users to embrace this vision and contribute to the responsible development and deployment of artificial intelligence for the benefit of all.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
