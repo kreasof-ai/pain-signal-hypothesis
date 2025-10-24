@@ -63,11 +63,11 @@ The simulation employs a two-tiered learning strategy: a primary evolutionary me
     *   **d. Reproduction (Genetic Algorithm):**
         *   When an agent dies, it is removed from the simulation.
         *   A new agent is immediately spawned to maintain the population size.
-        *   The new agent is an "offspring" of the **fittest survivor** (the living agent with the highest `age`).
+        *   The new agent is an "offspring" of from the **Tournament Selection** (choose 3 random survivor and pick agent with the highest `age`).
         *   The offspring inherits the parent's model weights, with a small amount of Gaussian noise added for **mutation**. This ensures that successful survival strategies are passed on and explored further.
 
-2.  **Intra-Life Learning (Hypothetical/Disabled):**
-    *   The `agent.learn` method is designed to allow agents to learn within their own lifetime but is currently disabled due to gradient issues.
+2.  **Intra-Life Learning (Unstable):**
+    *   The `agent.learn` method is designed to allow agents to learn within their own lifetime but is currently unstable.
     *   **If enabled, it would work as follows:**
         *   **Uncertainty Loss:** The Encoder/Decoder part of the model would be trained via supervised learning to minimize the prediction error between the predicted next perception and the actual next perception. This encourages the agent to build an accurate internal world model.
         *   **Action Loss:** The action-selection part of the model would be trained via reinforcement learning. The reward signal is derived from the **change in pain**. An action is "good" if it leads to a decrease in the pain signal (`pain_delta < 0`). The cross-entropy loss for the chosen action is weighted by this condition, only applying gradients for actions that reduce pain.
