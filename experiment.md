@@ -12,7 +12,7 @@ A population of agents whose primary evolutionary pressure is survival time (lon
 
 **I. Environment Setup:**
 
-<img width="1797" height="350" alt="Screenshot from a similar simulation run." src="https://github.com/user-attachments/assets/1d44fd67-5cbb-4559-b587-182eef787c04" />
+![grid-world](grid_world.png)
 
 1.  **Grid World:**
     *   **Grid Size:** 51 x 51.
