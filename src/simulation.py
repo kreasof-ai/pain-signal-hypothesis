@@ -431,9 +431,8 @@ class World:
             "oldest_ever_age": self.oldest_agent_ever_age,
         }
 
-    def get_render_frame(self):
-        """Creates a high-resolution frame for visualization."""
-        pixel_per_tile = 50
+    def get_render_frame(self, pixel_per_tile=15):
+        """Creates a render frame with a specified pixel size per tile."""
         frame = np.kron(self.current_map, np.ones((pixel_per_tile, pixel_per_tile, 1), dtype=np.uint8))
 
         for agent in self.agents.values():
@@ -443,91 +442,98 @@ class World:
             frame[y_start:y_start+pixel_per_tile, x_start:x_start+pixel_per_tile] = agent.color
         
         return frame
+    
+def render_episode(world: World, episode_num: int, num_steps: int):
+    """
+    Runs the simulation for a given number of steps and renders the output as a GIF.
+    """
+    print(f"\n--- Starting Episode {episode_num} ---")
+    
+    PIXEL_PER_TILE = 15  # Controls the size of the output GIF. 15 is a good balance.
+    fig, ax = plt.subplots(figsize=(12, 12))
+    ax.set_xticks([])
+    ax.set_yticks([])
+    
+    # Initialize the image plot
+    im = ax.imshow(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE), animated=True)
+    
+    # Dictionary to keep references to the text artists for agent IDs
+    agent_texts = {}
+
+    def update(frame_num):
+        # Run one simulation step
+        world.step()
+        
+        # Update the image data
+        im.set_array(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE))
+        
+        # --- Update agent ID texts ---
+        current_agent_ids = set(world.agents.keys())
+        
+        # Remove text for agents that have died
+        dead_ids = set(agent_texts.keys()) - current_agent_ids
+        for agent_id in dead_ids:
+            agent_texts[agent_id].set_visible(False)
+            del agent_texts[agent_id]
+
+        # Add/update text for current agents
+        for agent_id, agent in world.agents.items():
+            if agent_id not in agent_texts: # New agent spawned
+                agent_texts[agent_id] = ax.text(0, 0, "", ha='center', va='center', color='black', fontsize=8, fontweight='bold')
+            
+            txt = agent_texts[agent_id]
+            txt.set_text(str(agent.id))
+            txt.set_position((agent.x * PIXEL_PER_TILE + PIXEL_PER_TILE/2, 
+                              agent.y * PIXEL_PER_TILE + PIXEL_PER_TILE/2))
+            txt.set_visible(True)
+
+        # Update title with metrics
+        metrics = world.get_population_metrics()
+        title_text = (
+            f"Timestep: {frame_num + (episode_num - 1) * num_steps} | "
+            f"Live Agents: {len(world.agents)} | "
+            f"Avg Age: {metrics['avg_age']:.1f} | "
+            f"Oldest Living: {metrics['max_live_age']} | "
+            f"Oldest Ever (ID {metrics['oldest_ever_id']}): {metrics['oldest_ever_age']}"
+        )
+        ax.set_title(title_text, fontsize=10)
+        
+        # Print progress to console
+        if (frame_num + 1) % 100 == 0:
+            print(f"  Episode {episode_num}, Step {frame_num+1}/{num_steps}")
+
+        return [im] + list(agent_texts.values())
+
+    # Create the animation
+    ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=200, blit=True, repeat=False)
+    
+    # Save the animation
+    output_filename = f"episode_{episode_num}.gif"
+    print(f"--- Saving animation to {output_filename} ---")
+    ani.save(output_filename, writer='pillow', fps=5)
+    plt.close(fig) # IMPORTANT: Close the figure to free up memory
+    print(f"--- Finished Episode {episode_num} ---")
 
 
+# --- Main Simulation and Animation Setup ---
 # --- Main Simulation and Animation Setup ---
 if __name__ == "__main__":
     random.seed(42)
     np.random.seed(42)
 
-    GRID_WIDTH = 51 # Use an odd number for the generator
+    GRID_WIDTH = 51 
     GRID_HEIGHT = 51
     NUM_AGENTS = 10
     NUM_POWER_CELLS = 50
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 
-    TOTAL_SIMULATION_STEPS = 5000
-    STEPS_PER_EPISODE = 1000
+    TOTAL_SIMULATION_STEPS = 500
+    STEPS_PER_EPISODE = 100 # This will create animations of 1000 steps each
     
-    for episode in range(TOTAL_SIMULATION_STEPS // STEPS_PER_EPISODE):
-        print(f"\n--- Starting Episode {episode + 1} ---")
-        for step in range(STEPS_PER_EPISODE):
-            world.step()
-            
-            if (step + 1) % 10 == 0: # Print metrics every 100 steps
-                metrics = world.get_population_metrics()
-                print(
-                    f"  Step {step+1}/{STEPS_PER_EPISODE} | "
-                    f"Live Agents: {len([a for a in world.agents.values() if a.is_alive])} | "
-                    f"Avg Age: {metrics['avg_age']:.2f} | "
-                    f"Oldest Living: {metrics['max_live_age']} | "
-                    f"Oldest Ever (ID {metrics['oldest_ever_id']}): {metrics['oldest_ever_age']}"
-                )
-        print(f"--- Finished Episode {episode + 1} ---")
+    num_episodes = TOTAL_SIMULATION_STEPS // STEPS_PER_EPISODE
 
-    # BELOW IS OLDER VERSION FOR ANIMATION RENDERING, NEED UPDATES FOR CURRENT STATE OF CODEBASE
+    for i in range(num_episodes):
+        render_episode(world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE)
 
-    # fig, ax = plt.subplots(figsize=(18, 9))
-    # ax.set_xticks([])
-    # ax.set_yticks([])
-    
-    # # Initialize the image plot
-    # im = ax.imshow(world.get_render_frame(), animated=True)
-    
-    # # We need to keep references to the text artists to update them
-    # agent_texts = {}
-    # for agent_id, agent in world.agents.items():
-    #     agent_texts[agent_id] = ax.text(0, 0, "", ha='center', va='center', color='black', fontsize=6, fontweight='bold')
-
-    # def update(frame_num):
-    #     # Run one simulation step
-    #     world.step()
-        
-    #     # Update the image data
-    #     im.set_array(world.get_render_frame())
-        
-    #     # Update agent ID texts
-    #     pixel_per_tile = 50
-    #     current_agent_ids = set(world.agents.keys())
-        
-    #     # Remove text for agents that have died
-    #     dead_ids = set(agent_texts.keys()) - current_agent_ids
-    #     for agent_id in dead_ids:
-    #         agent_texts[agent_id].set_visible(False)
-    #         del agent_texts[agent_id]
-
-    #     # Add/update text for current agents
-    #     for agent_id, agent in world.agents.items():
-    #         if agent_id not in agent_texts: # New agent spawned
-    #             agent_texts[agent_id] = ax.text(0, 0, "", ha='center', va='center', color='black', fontsize=6, fontweight='bold')
-            
-    #         txt = agent_texts[agent_id]
-    #         txt.set_text(str(agent.id))
-    #         txt.set_position((agent.x * pixel_per_tile + pixel_per_tile/2, 
-    #                           agent.y * pixel_per_tile + pixel_per_tile/2))
-    #         txt.set_visible(True)
-
-    #     ax.set_title(f"Timestep: {frame_num+1} | Live Agents: {len(world.agents)}")
-    #     return [im] + list(agent_texts.values())
-
-    # # Create the animation
-    # ani = animation.FuncAnimation(fig, update, frames=1000, interval=200, blit=True, repeat=False)
-    
-    # plt.tight_layout()
-    # plt.show()
-
-    # # To save the animation (optional, requires ffmpeg):
-    # print("Saving animation...")
-    # ani.save('agent_simulation.gif', writer='pillow', fps=5)
-    # print("Done saving.")
+    print("\n--- All episodes rendered. ---")
