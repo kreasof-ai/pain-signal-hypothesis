@@ -1,6 +1,6 @@
 # The Homeostatic Imperative in Embodied Intelligence: A Pain Signal Hypothesis 
 
-<img width="1797" height="900" alt="Screenshot 2025-10-24 105843" src="https://github.com/user-attachments/assets/6b063daa-c71d-4eb5-89f0-33a5614284e3" />
+<img width="1797" height="350" alt="Screenshot 2025-10-24 105843" src="https://github.com/user-attachments/assets/6b063daa-c71d-4eb5-89f0-33a5614284e3" />
 
 ---
 

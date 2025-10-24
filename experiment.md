@@ -2,128 +2,98 @@
 
 **Objective:**
 
-To demonstrate that an embodied agent driven by a pain signal, composed of uncertainty, computational load, and energy level, can learn to survive and adapt in a complex environment without explicit external rewards.
+To demonstrate that a population of embodied agents, guided by a combination of an evolutionary survival-of-the-fittest mechanism and an intrinsic pain signal, can develop strategies to survive and adapt in a complex, hazardous environment without explicit, externally defined rewards.
 
 **Hypothesis:**
 
-An agent that seeks to minimize its pain signal will exhibit emergent behaviors such as exploration, efficient computation, and resource management, leading to long-term survival in a dynamic environment.
+A population of agents whose primary evolutionary pressure is survival time (longevity) will produce individuals that learn to minimize an internal "pain signal" derived from low energy and high-effort situations. This will lead to the emergence of complex behaviors such as exploration for resources (power cells), avoidance of hazards (traps, wind), and efficient movement.
 
 **Algorithm:**
 
 **I. Environment Setup:**
 
-<img width="1797" height="900" alt="Screenshot 2025-10-24 105843" src="https://github.com/user-attachments/assets/1d44fd67-5cbb-4559-b587-182eef787c04" />
+<img width="1797" height="350" alt="Screenshot from a similar simulation run." src="https://github.com/user-attachments/assets/1d44fd67-5cbb-4559-b587-182eef787c04" />
 
-1. **Grid World:**
-    *   Define grid size: 17 x 17.
-    *   Define obstacle types:
-        *   Walls (W): Impassable.
-        *   Holes (H): Agent dies if it enters a hole.
-        *   Wind (Y): Increases energy cost for movement and staying.
-    *   Define power cell locations (P1-P14) and their appearance/disappearance schedules. Each power cell has a unique schedule, represented as a list of (start\_time, end\_time) tuples, indicating when it's available during a cycle (e.g., a 100-step cycle).
-    *   Define the agent's starting/respawn position (S).
+1.  **Grid World:**
+    *   **Grid Size:** 51 x 51.
+    *   **Procedural Generation:** The map is generated using a `MazeMapGenerator` which combines Prim's algorithm for maze creation with the addition of multiple rooms to create a complex, non-uniform space.
+    *   **Tile Types:**
+        *   **Wall** (Black): Impassable.
+        *   **Floor** (White): Walkable, neutral.
+        *   **Trap** (Red): Agent dies instantly upon entering.
+        *   **Wind** (Blue): Increases energy cost for movement and staying.
+    *   **Agent Spawning:** Agents spawn at random, valid "Floor" tile locations.
 
-2. **Power Cell Dynamics:**
-    *   Each power cell has a timer that determines when it disappears.
-    *   When a power cell is collected, it provides a fixed amount of energy (e.g., 50) but does not allow the agent to exceed a maximum energy level (e.g., 200).
-    *   Implement a mechanism for a random power cell to spawn within the agent's perception range when the agent's energy level falls below a threshold (e.g., 10) with a certain probability.
+2.  **Power Cell Dynamics:**
+    *   A fixed number of power cells (e.g., 50) are spawned at random "Floor" locations at the start and periodically during the simulation (e.g., 5% chance each timestep to respawn all cells).
+    *   When a power cell is collected, it provides a fixed amount of energy (e.g., 25) and is consumed (the tile turns to "Floor").
 
 **II. Agent Setup:**
 
-1. **Architecture:**
-    *   **ResNet:** Processes the `K_grid x K_grid` local view centered on the agent.
-        *   Input: `K_grid x K_grid` grid representation with one-hot encoding for each cell type (empty, wall, hole, wind, power cell).
-        *   Output: Feature map representing the local environment.
-    *   **Transformer:** Processes the sequence of the agent's previous actions.
-        *   Input: Sequence of the last `N_steps` actions (represented as embeddings).
-        *   Output: Action probabilities.
-    *   **Cross-Attention:** Integrates the ResNet feature map with the Transformer's output to inform action selection.
+1.  **Architecture (`AgentModel`):**
+    *   **Encoder:** A simple CNN (2 `Conv2d` layers) that processes the `7x7` local visual perception of the agent and encodes it into a feature vector.
+    *   **Memory Processor (`ConvModel`):** A custom convolutional model using `LFM2ConvOperator` and `SwiGLU` blocks. It processes the sequence of the agent's last 31 actions.
+    *   **Integration:** The encoded perception vector is concatenated with the action history embeddings before being processed by the `ConvModel` to decide the next action.
+    *   **Decoder:** A simple deconvolutional network (`ConvTranspose2d`) that attempts to predict the agent's next `7x7` perception based on its internal state.
+    *   **Action Head (`lm_head`):** A linear layer that produces logits for the 5 possible actions from the `ConvModel`'s output.
 
-2. **Parameters:**
-    *   `K_grid`: Initial perception size (e.g., 3).
-    *   `N_steps`: Initial memory length (e.g., 5).
-    *   `w_u`: Weight for uncertainty in the pain signal.
-    *   `w_c`: Weight for computational load in the pain signal.
-    *   `w_e`: Weight for energy level in the pain signal.
-    *   Learning rate, discount factor, exploration parameters (e.g., epsilon for epsilon-greedy).
+2.  **Parameters:**
+    *   `perception_size`: Fixed at 7x7.
+    *   `memory_length`: Fixed at 31 previous actions.
+    *   Actions: 5 (up, down, left, right, idle).
+    *   Learning Rate: 1e-4 (using AdamW optimizer).
 
-3. **Internal State:**
-    *   **Uncertainty:** Initialized to a high value (e.g., 1.0). Updated based on prediction errors.
-    *   **Computational Load:** Initialized to 0. Increases with `K_grid` size, `N_steps`, and potentially the complexity of internal computations.
-    *   **Energy Level:** Initialized to 100. Decreases with movement, perception, memory, and wind. Increases when a power cell is collected.
+3.  **Internal State & Pain Signal:**
+    *   **Energy Level:** Initialized to 100. Decreases with each step, with extra penalties for being in "Wind" tiles. Increases when a power cell is collected. Agent dies if energy reaches 0.
+    *   **Pain Signal:** Calculated each step as a weighted sum of two components:
+        *   **Energy Pain (`pain_energy`):** Inverse of energy level. High pain when energy is low.
+        *   **Computational/Effort Pain (`pain_comp`):** An implicit measure of effort. High cost for being in a "Wind" tile, medium cost for moving, and low cost for idling.
+    *   **Uncertainty:** While not part of the pain signal, it is calculated as the prediction error between the Decoder's output and the actual next perception. This is used as a loss for training the world model (Encoder/Decoder).
 
-**III. Training Process:**
+**III. Learning and Evolution Process:**
 
-1. **Initialization:**
-    *   Initialize the environment (grid, obstacles, power cell schedules).
-    *   Initialize the agent (ResNet, Transformer, internal state).
-    *   Initialize `survival_time` to 0.
+The simulation employs a two-tiered learning strategy: a primary evolutionary mechanism for inter-generational learning and a secondary (currently disabled) mechanism for intra-life learning.
 
-2. **Main Loop (Run Indefinitely):**
-    *   **a. Perception:**
-        *   Agent observes the `K_grid x K_grid` area around it using the ResNet.
-        *   Agent predicts the next `K_grid x K_grid` perception using the ResNet and the last hidden state of the Transformer.
-    *   **b. Action Selection:**
-        *   The Transformer processes the action history and the ResNet feature map (through cross-attention) to produce action probabilities.
-        *   The agent selects an action based on these probabilities using an exploration strategy (e.g., epsilon-greedy).
-        *   The agent may choose to change its perception size (`K_grid`) or memory length (`N_steps`).
-    *   **c. Environment Interaction:**
-        *   The agent executes the chosen action in the environment.
-        *   The environment transitions to a new state based on the action and the grid dynamics (wind, power cell appearance/disappearance).
-    *   **d. Reward and Done:**
-        *   The agent receives a reward for collecting a power cell (e.g., +5).
-        *   The agent receives a penalty for falling into a hole (e.g., -10).
-        *   `done` is set to `True` if the agent falls into a hole or its energy reaches 0. Otherwise, `done` is `False`.
-    *   **e. Prediction Error Calculation:**
-        *   The agent compares its predicted next perception with the actual next perception.
-        *   The prediction error is calculated (e.g., as the number of mismatched cells).
-    *   **f. Internal State Update:**
-        *   **Uncertainty:** Updated based on the prediction error.
-        *   **Computational Load:** Updated based on `K_grid`, `N_steps`, and potentially other factors.
-        *   **Energy Level:** Updated based on the action taken, wind effects, and whether a power cell was collected.
-        *   **Action History:** The current action is added to the action history.
-    *   **g. Pain Signal Calculation:**
-        *   The pain signal is calculated as a weighted sum of uncertainty, computational load, and the inverse of the energy level: `P = w_u * U + w_c * C + w_e * (100 - E)`
-    *   **h. Learning:**
-        *   The ResNet is trained to predict the next perception using supervised learning (minimizing the prediction error).
-        *   The Transformer is trained using reinforcement learning (e.g., actor-critic or Q-learning) to minimize the long-term pain signal.
-    *   **i. Survival Tracking:**
-        *   If the agent is alive, increment `survival_time`.
-        *   If the agent dies, reset `survival_time` to 0 and respawn the agent at the starting position, keeping the learned parameters but resetting position and energy level.
-    *   **j. Termination Check:**
-        *   If `survival_time` is greater than or equal to 10,000, terminate the simulation.
-    *   **k. Visualization (Optional):**
-        *   Update real-time visualizations (Pygame, Matplotlib) or log data for later analysis.
+1.  **Main Loop (Evolutionary Selection):**
+    *   **a. Action:** Each agent perceives its local `7x7` environment, processes it with its action history, and chooses an action using an epsilon-greedy policy (10% random action).
+    *   **b. Interaction:** The agent executes the action. Its energy is updated based on the tile it lands on (Wind, Power Cell) and the base cost of survival.
+    *   **c. Survival Check:** The agent's life state is checked.
+        *   **Death:** An agent dies if it enters a "Trap" tile or its energy level drops to zero.
+        *   **Survival:** If the agent survives, its `age` is incremented.
+    *   **d. Reproduction (Genetic Algorithm):**
+        *   When an agent dies, it is removed from the simulation.
+        *   A new agent is immediately spawned to maintain the population size.
+        *   The new agent is an "offspring" of the **fittest survivor** (the living agent with the highest `age`).
+        *   The offspring inherits the parent's model weights, with a small amount of Gaussian noise added for **mutation**. This ensures that successful survival strategies are passed on and explored further.
+
+2.  **Intra-Life Learning (Hypothetical/Disabled):**
+    *   The `agent.learn` method is designed to allow agents to learn within their own lifetime but is currently disabled due to gradient issues.
+    *   **If enabled, it would work as follows:**
+        *   **Uncertainty Loss:** The Encoder/Decoder part of the model would be trained via supervised learning to minimize the prediction error between the predicted next perception and the actual next perception. This encourages the agent to build an accurate internal world model.
+        *   **Action Loss:** The action-selection part of the model would be trained via reinforcement learning. The reward signal is derived from the **change in pain**. An action is "good" if it leads to a decrease in the pain signal (`pain_delta < 0`). The cross-entropy loss for the chosen action is weighted by this condition, only applying gradients for actions that reduce pain.
 
 **IV. Evaluation:**
 
-1. **Metrics:**
-    *   **Survival Time:** The primary metric - how many timesteps the agent survives consecutively.
-    *   **Average Pain Signal:** Track the average pain signal over time.
-    *   **Uncertainty, Computational Load, and Energy over Time:** Analyze the evolution of these components.
-    *   **Number of Deaths:** How many times does the agent die before reaching the survival goal?
-    *   **Power Cells Collected:** How many power cells does the agent collect on average?
-    *   **Exploration Rate:** How much of the environment does the agent explore?
-    *   **Average `K_grid` and `N_steps`:** How do these values change over time?
+1.  **Metrics:**
+    *   **Maximum Survival Time (Age):** The primary metric. Tracks the age of the oldest living agent and the oldest agent ever recorded. This directly measures the success of the evolutionary strategy.
+    *   **Average Population Age:** Indicates the overall fitness and resilience of the current population.
+    *   **Number of Live Agents:** Tracks population stability.
+    *   **Analysis of Survivor Traits:** Post-simulation analysis of the behavior of long-lived agents to identify emergent strategies (e.g., pathing, risk-aversion, resource-seeking).
 
-2. **Analysis:**
-    *   Analyze the agent's behavior to see if it exhibits the expected emergent behaviors (exploration, risk aversion, pathfinding, computational trade-offs).
-    *   Investigate the relationship between the pain signal components and the agent's performance.
-    *   Compare the performance of agents with different pain signal weights (`w_u`, `w_c`, `w_e`).
-    *   Compare the performance of agents with different architectures or learning algorithms.
+2.  **Analysis:**
+    *   Analyze the correlation between survival time and the learned behaviors.
+    *   Investigate if agents evolve to effectively balance exploration (to find power cells and reduce uncertainty) with exploitation (staying in safe, low-energy-cost areas).
+    *   Compare the performance of populations evolved with different pain signal weights or mutation rates.
 
 **V. Visualization:**
 
-1. **Real-time (using Pygame):**
-    *   Display the grid world.
-    *   Show the agent's position and movement.
-    *   Visualize the agent's perception area (`K_grid x K_grid`).
-    *   Indicate the locations of walls, holes, wind, and power cells.
-    *   Display the agent's current energy level, and potentially the uncertainty and computational load.
+1.  **Real-time (via Matplotlib/Pygame - requires update):**
+    *   Display the grid world, showing Walls, Traps, Wind, and Power Cells.
+    *   Show each agent's position, represented by a unique color.
+    *   Display agent IDs and key stats (e.g., energy level) as text overlays.
+    *   Provide a title with the current timestep and the number of live agents.
+    *   *Note: The animation code in `simulation.py` is outdated and needs to be updated to work with the current dictionary-based agent management system.*
 
-2. **Post-Simulation (using Matplotlib or TensorBoard/Visdom):**
-    *   Plot the pain signal and its components over time.
-    *   Plot the agent's survival time over multiple episodes.
-    *   Create heatmaps of the agent's uncertainty about the environment.
-    *   Visualize the agent's learned policy (e.g., using arrows to indicate the preferred action in each cell).
-    *   Visualize the weights or activations of the ResNet and Transformer to gain insights into what the agent has learned.
+2.  **Post-Simulation (using Matplotlib):**
+    *   Plot the maximum and average agent age over time to visualize the progress of evolution.
+    *   Create heatmaps of agent visitations to identify common pathways and areas of exploration vs. avoidance.
