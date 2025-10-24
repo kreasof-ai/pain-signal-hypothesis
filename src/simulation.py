@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
 
-from tinygrad import Tensor, Device, dtypes
+from tinygrad import Tensor, Device, dtypes, TinyJit
 from tinygrad.nn.state import get_parameters, get_state_dict, load_state_dict
 from tinygrad.nn.optim import AdamW
 
@@ -126,6 +126,10 @@ class Agent:
         self.energy = 100
         self.age = 0
         self.is_alive = True
+
+        self.start_epsilon = 0.8  # Start with 80% chance of random action
+        self.end_epsilon = 0.1    # Decay to 10% chance of random action
+        self.epsilon_decay_steps = 25 # The number of steps over which to decay
         
         self.config = config
         self.model = AgentModel(config)
@@ -138,7 +142,7 @@ class Agent:
         
         # 0:up, 1:down, 2:left, 3:right, 4:idle
         self.action_history = deque([4] * 31, maxlen=31) 
-        self.last_pain_signal = self.calculate_pain_signal(initial_tile_color, None)
+        self.last_pain_signal = self.calculate_pain_signal(initial_tile_color, None, hit_a_wall=False)
 
         r, g, b = 255, random.randint(100, 200), 0
         self.color = (r, g, b)
@@ -161,10 +165,10 @@ class Agent:
         
         # Normalize to [0, 1] and convert to Tensor
         # (C, H, W) format expected by Conv2d
-        perception_tensor = Tensor(view.astype(np.float32) / 255.0, device=Device.DEFAULT, requires_grad=True).permute(2, 0, 1).unsqueeze(0)
+        perception_tensor = Tensor(view.astype(np.float32) / 255.0, device=Device.DEFAULT).permute(2, 0, 1).unsqueeze(0)
         return perception_tensor
 
-    def calculate_pain_signal(self, current_tile_color: tuple, last_action_idx: int) -> float:
+    def calculate_pain_signal(self, current_tile_color: tuple, last_action_idx: int, hit_a_wall: bool) -> float:
         """Calculates the composite pain signal based on internal state."""
         # Weighting factors
         w_energy = 2.0
@@ -174,9 +178,11 @@ class Agent:
         # Pain is high when energy is low.
         pain_energy = (1.0 - (self.energy / 100.0))
         
-        # 2. Computational Load Pain (derived from action and tile)
+        # 2. Computational Load / Effort Pain
         pain_comp = 0.0
-        if current_tile_color == COLORS["WIND"]:
+        if hit_a_wall:
+            pain_comp = 1.0  # High cost for an unproductive, invalid move
+        elif current_tile_color == COLORS["WIND"]:
             pain_comp = 1.0 # High cost in a wind tile
         elif last_action_idx is not None and last_action_idx != 4: # Moving
             pain_comp = 0.5 # Medium cost for moving
@@ -184,59 +190,82 @@ class Agent:
             pain_comp = 0.1 # Low cost for idling
         
         return (w_energy * pain_energy) + (w_comp * pain_comp)
-
-    def choose_action(self, perception_tensor: Tensor) -> int:
-        """Uses the model to decide the next action."""
-        memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32, requires_grad=True)
-        
+    
+    @TinyJit
+    def _inference(self, perception_tensor: Tensor, memory_tensor: Tensor) -> int:
         output = self.model(perception_tensor, memory_tensor)
         logits = output["logits"].realize()
-        
+                
         # Get action from the last timestep's logits
         action_logits = logits[0, -1, :]
-        
-        # Simple epsilon-greedy exploration
-        if random.random() < 0.1: # 10% chance of random action
-            action_idx = random.randint(0, self.config.vocab_size - 1)
-        else:
-            action_idx = action_logits.argmax().numpy().item()
-            
+
+        probs = (action_logits / 1.0).softmax()
+    
+        action_idx = (probs.cumsum() > Tensor.uniform(1).item()).argmax().numpy().item()
+
         return action_idx
 
-    def learn(self, current_tile_color: tuple, perception_tensor: Tensor, last_perception_tensor: Tensor, action_idx: int):
-        """Intra-life learning step to minimize pain."""
+    def choose_action(self, perception_tensor: Tensor) -> int:
+        """Uses the model to decide the next action with decaying epsilon-greedy exploration."""
+        # Calculate the progress of the decay, clamped between 0.0 and 1.0
+        progress = min(1.0, self.age / self.epsilon_decay_steps)
+        # Linearly interpolate from start_epsilon to end_epsilon based on progress
+        current_epsilon = self.start_epsilon - (self.start_epsilon - self.end_epsilon) * progress
+
+        if random.random() < current_epsilon:
+            # EXPLORE: Choose a random action
+            action_idx = random.randint(0, self.config.vocab_size - 1)
+        else:
+            memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32)
+            action_idx = self._inference(perception_tensor, memory_tensor)
+
+        return action_idx
+
+    @TinyJit
+    def learn(self, current_tile_color: tuple, perception_tensor: Tensor, last_perception_tensor: Tensor, action_idx: int, hit_a_wall: bool):
+        """Intra-life learning step to minimize pain. (Corrected with graph-safe conditional)"""
         with Tensor.train():
             self.optimizer.zero_grad()
             
-            memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32, requires_grad=True)
+            # Re-create the memory tensor from the state when the action was taken.
+            # Note: The *last* action in this deque is the one we are evaluating.
+            memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32)
+            
+            # --- Forward pass from the PREVIOUS state to get the prediction and logits that led to the CURRENT state ---
             output = self.model(last_perception_tensor, memory_tensor)
             logits = output["logits"]
             tile_prediction = output["prediction"]
             
+            # --- 1. Uncertainty Loss (Supervised) ---
+            # How well did the agent predict the current view from its last view?
             loss_uncertainty = (tile_prediction - perception_tensor).square().mean()
 
-            current_pain = self.calculate_pain_signal(current_tile_color, action_idx)
+            # --- 2. Action Loss (Reinforcement) ---
+            # The agent is rewarded for actions that reduce its pain signal.
+            current_pain = self.calculate_pain_signal(current_tile_color, action_idx, hit_a_wall)
             pain_delta = current_pain - self.last_pain_signal
             
+            # We only care about the logit for the action we just took.
             action_logits = logits[0, -1, :]
             
-            # Calculate the cross-entropy loss regardless.
-            # This establishes the computational graph to the lm_head.
+            # Calculate the cross-entropy loss for the action that was actually taken.
             ce_loss = action_logits.sparse_categorical_crossentropy(Tensor([action_idx], device=Device.DEFAULT))
             
-            # Use a condition to determine the *weight* of this loss.
-            # If pain did not decrease, the weight is 0, so it contributes nothing to the gradient magnitude.
-            # But the graph connection remains!
-            loss_weight = 1.0 if pain_delta < -0.01 else 0.0
+            # Use Tensor.where to create a graph-safe conditional weight.
+            condition = Tensor([pain_delta], device=Device.DEFAULT) < -0.01
             
-            loss_action = ce_loss * loss_weight
+            # If pain decreased, the weight is 1.0 (learn from this good move). Otherwise, it's 0.0.
+            loss_weight = condition.where(1.0, 0.0)
+            
+            loss_action = (ce_loss * loss_weight).sum() # Use the graph-safe weight
 
-            # --- Combine losses ---
+            # --- Combine losses and backpropagate ---
             total_loss = loss_uncertainty + loss_action
             
             total_loss.backward()
             self.optimizer.step()
             
+            # Update the pain signal for the next step's comparison
             self.last_pain_signal = current_pain
 
     def move(self, dy: int, dx: int):
@@ -262,7 +291,7 @@ class World:
         print("--- Initializing World ---")
         self.map_generator = MazeMapGenerator(width, height)
         self.static_map = self.map_generator.generate_new_map(
-            num_rooms=50, trap_ratio=0.05, wind_ratio=0.15
+            num_rooms=64, trap_ratio=0.05, wind_ratio=0.15
         )
         self.current_map = self.static_map.copy()
         
@@ -304,9 +333,13 @@ class World:
         if parent_weights:
             child_weights = {}
             for name, tensor in parent_weights.items():
-                # Add Gaussian noise for mutation
-                noise = Tensor.randn(*tensor.shape, device=Device.DEFAULT) * 0.01 # Small mutation
-                child_weights[name] = (tensor + noise).realize()
+                # Detach the parent tensor from its computational graph by creating a new tensor from its numpy representation.
+                # This prevents the recursion error by stopping the graph from growing across generations.
+                detached_tensor = Tensor(tensor.numpy(), device=Device.DEFAULT)
+
+                # Add Gaussian noise for mutation to the clean tensor
+                noise = Tensor.randn(*detached_tensor.shape, device=Device.DEFAULT) * 0.01 # Small mutation
+                child_weights[name] = (detached_tensor + noise).realize()
         
         initial_tile_color = tuple(self.static_map[spawn_pos])
         
@@ -332,6 +365,7 @@ class World:
     def step(self):
         agents_to_remove = []
         action_map = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1), 4: (0, 0)} # up, down, left, right, idle
+        WALL_BUMP_PENALTY = 5 # Extra energy cost for hitting a wall
         
         # --- Cache perceptions for all agents first ---
         perceptions = {
@@ -343,20 +377,31 @@ class World:
             if not agent.is_alive: continue
             agent.age += 1
             
-            last_perception = perceptions[agent_id] # This is the perception from the *end of last step*
+            last_perception = perceptions[agent_id]
             action_idx = agent.choose_action(last_perception)
             
-            dy, dx = action_map.get(action_idx, (0, 0)) # Default to idle if invalid
+            dy, dx = action_map.get(action_idx, (0, 0))
             
+            # --- Collision Detection and Penalty Logic ---
             ny, nx = agent.y + dy, agent.x + dx
+            hit_a_wall = False
+            
+            # Check if the INTENDED move is invalid
             if not (0 <= ny < self.height and 0 <= nx < self.width and
                     not np.array_equal(self.current_map[ny, nx], COLORS["WALL"]) and
                     (ny, nx) not in self._agent_positions):
-                dy, dx = 0, 0 # Invalidate move, force idle
-                action_idx = 4
-            
+                
+                # If the intended move was not to stay idle, it's a bump
+                if action_idx != 4:
+                    hit_a_wall = True
+                    agent.energy -= WALL_BUMP_PENALTY
+
+                # Invalidate move, force idle
+                dy, dx = 0, 0 
+                # Note: We don't change action_idx, so the agent learns from its *intended* bad action
+
             self._agent_positions.remove((agent.y, agent.x))
-            agent.move(dy, dx)
+            agent.move(dy, dx) # This will be (0,0) if the move was invalid
             self._agent_positions.add((agent.y, agent.x))
             agent.action_history.append(action_idx)
 
@@ -372,14 +417,14 @@ class World:
                 agent.energy -= 10 # Extra energy drain
             
             if tile_color == COLORS["POWER_CELL"]:
-                agent.energy += 25 # add 25 energy for consuming power cell
-                self.current_map[agent.y, agent.x] = COLORS["FLOOR"] # Consume the cell
+                agent.energy += 25
+                self.current_map[agent.y, agent.x] = COLORS["FLOOR"]
                 print(f"Agent {agent.id} consumed a power cell.")
             
             current_perception = agent.get_perception(self.current_map)
 
-            # disable intra-agent learning because of Tinygrad gradient issue
-            # agent.learn(tile_color, current_perception, last_perception, action_idx)
+            # Enable the now-fixed intra-agent learning, passing the collision flag
+            agent.learn(tile_color, current_perception, last_perception, action_idx, hit_a_wall)
             
             agent.energy -= 1 # Base energy cost per step
 
@@ -392,8 +437,17 @@ class World:
             surviving_agents = [a for a in self.agents.values() if a.is_alive]
             parent = None
             if surviving_agents:
-                # Select parent based on age (longevity is fitness)
-                parent = max(surviving_agents, key=lambda a: a.age)
+                # --- TOURNAMENT SELECTION LOGIC ---
+                # 1. Determine the size of the tournament (up to 3 contestants)
+                #    This handles the edge case where fewer than 3 agents are alive.
+                tournament_size = min(3, len(surviving_agents))
+                
+                # 2. Randomly select the contestants from the pool of survivors
+                contestants = random.sample(surviving_agents, tournament_size)
+                
+                # 3. The parent is the winner of the tournament (the one with the max age)
+                parent = max(contestants, key=lambda a: a.age)
+                # --- END OF TOURNAMENT SELECTION LOGIC ---
             
             parent_weights = get_state_dict(parent.model) if parent else None
 
@@ -454,8 +508,8 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
     PIXEL_PER_TILE = 50
     
     # --- 1. Setup the Figure and Subplots using GridSpec for better layout control ---
-    fig = plt.figure(figsize=(30, 9))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1, 3], wspace=0.3)
+    fig = plt.figure(figsize=(30, 10))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.1)
     
     ax_maze = fig.add_subplot(gs[0, 0])
     ax_plot = fig.add_subplot(gs[0, 1])
@@ -548,8 +602,8 @@ if __name__ == "__main__":
 
     GRID_WIDTH = 51 
     GRID_HEIGHT = 51
-    NUM_AGENTS = 10
-    NUM_POWER_CELLS = 50
+    NUM_AGENTS = 12
+    NUM_POWER_CELLS = 100
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 

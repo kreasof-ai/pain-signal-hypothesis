@@ -76,14 +76,13 @@ class LFM2ConvOperator:
 
 @dataclass
 class ConvConfig:
-    vocab_size: int = 32
+    vocab_size: int = 5
     hidden_size: int = 16  # n_dim
     intermediate_size: int = 40 # FFN intermediate dim, typically 2.5 * hidden_size
     num_hidden_layers: int = 6
     conv_kernel_size: int = 3
-    max_position_embeddings: int = 64
+    max_position_embeddings: int = 32
     rms_norm_eps: float = 1e-5
-    tie_word_embeddings: bool = False
 
 class ConvBlock:
     def __init__(self, config: ConvConfig):
@@ -126,10 +125,7 @@ class AgentModel:
         self.embed_tokens = Embedding(config.vocab_size, config.hidden_size)
         self.model = ConvModel(config)
         self.lm_head = Linear(config.hidden_size, config.vocab_size, bias=False)
-        if config.tie_word_embeddings:
-            self.lm_head.weight = self.embed_tokens.weight
 
-    @TinyJit
     def __call__(self, input: Tensor, memory: Tensor):
         perception = self.encoder(input) # encodes perception from current surrounding 7x7 tiles
         h = self.embed_tokens(memory) # encode action histories into embedding
@@ -174,27 +170,25 @@ if __name__ == "__main__":
     # --- 2. Create Dummy Data ---
     # Simulates one agent's input
     batch_size = 1
-    
+
+    # Visual perception: a 7x7 RGB image, normalized
+    dummy_perception = Tensor.randn(batch_size, 3, 7, 7)
+            
+    # Action history: sequence of 31 action indices
+    dummy_memory = Tensor(
+        np.random.randint(0, config.vocab_size, size=(batch_size, 31)), 
+        dtype=dtypes.int32
+    )
+            
+    # Ground truth for loss calculation
+    dummy_target_action = Tensor([2], dtype=dtypes.int32) # e.g., agent should move "left"
+    dummy_target_perception = Tensor.randn(batch_size, 3, 7, 7) # The view agent *should* have predicted
 
     print("\n--- Starting Dummy Training Loop ---")
 
     # --- 3. Training Loop ---
     with Tensor.train():
-        for i in range(10):
-            
-            # Visual perception: a 7x7 RGB image, normalized
-            dummy_perception = Tensor.randn(batch_size, 3, 7, 7)
-            
-            # Action history: sequence of 31 action indices
-            dummy_memory = Tensor(
-                np.random.randint(0, config.vocab_size, size=(batch_size, 31)), 
-                dtype=dtypes.int32
-            )
-            
-            # Ground truth for loss calculation
-            dummy_target_action = Tensor([2], dtype=dtypes.int32) # e.g., agent should move "left"
-            dummy_target_perception = Tensor.randn(batch_size, 3, 7, 7) # The view agent *should* have predicted
-            
+        for i in range(100):
             optimizer.zero_grad()
             # --- Forward pass ---
             output = model(dummy_perception, dummy_memory)
