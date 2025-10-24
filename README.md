@@ -4,8 +4,6 @@
 
 <hr>
 
-![diagram-simplified](diagram-simplified.png)
-
 > Our work has significant overlap with philosophical, computational, and neuroscience discussions from Aapo Hyvärinen called [Painful intelligence: What AI can tell us about human suffering](https://arxiv.org/abs/2205.15409)
 
 **Abstract**
