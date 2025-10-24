@@ -12,6 +12,9 @@ from tinygrad.nn.optim import AdamW
 
 from model.agents import AgentModel, ConvConfig
 
+import sys
+sys.setrecursionlimit(1000000)
+
 COLORS = {
     "WALL": (0, 0, 0),         # Black - Impassable
     "FLOOR": (255, 255, 255), # White - Walkable
@@ -134,6 +137,9 @@ class Agent:
         
         self.config = config
         self.model = AgentModel(config)
+        for k, v in get_state_dict(self.model).items():  
+            v.realize()
+        
         if initial_weights:
             load_state_dict(self.model, initial_weights)
 
@@ -295,7 +301,7 @@ class World:
         print("--- Initializing World ---")
         self.map_generator = MazeMapGenerator(width, height)
         self.static_map = self.map_generator.generate_new_map(
-            num_rooms=64, trap_ratio=0.05, wind_ratio=0.15
+            num_rooms=400, trap_ratio=0.05, wind_ratio=0.15
         )
         self.current_map = self.static_map.copy()
         
@@ -542,9 +548,6 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
     ax_plot.grid(True, alpha=0.3)
 
     def update(frame_num):
-        global_timestep = frame_num + (episode_num - 1) * num_steps
-        print(f"    Global Timesteps: {global_timestep}")
-
         # --- Run one simulation step ---
         world.step()
         
@@ -568,6 +571,7 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
             txt.set_visible(True)
 
         metrics = world.get_population_metrics()
+        global_timestep = frame_num + (episode_num - 1) * num_steps
         title_text = f"Timestep: {global_timestep} | Live Agents: {len(world.agents)}"
         ax_maze.set_title(title_text, fontsize=12)
         
@@ -610,9 +614,9 @@ if __name__ == "__main__":
     random.seed(42)
     np.random.seed(42)
 
-    GRID_WIDTH = 51 
-    GRID_HEIGHT = 51
-    NUM_AGENTS = 20
+    GRID_WIDTH = 101 
+    GRID_HEIGHT = 101
+    NUM_AGENTS = 64
     NUM_POWER_CELLS = 100
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
