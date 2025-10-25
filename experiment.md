@@ -15,7 +15,7 @@ A population of agents whose primary evolutionary pressure is survival time (lon
 ![grid-world](grid_world.png)
 
 1.  **Grid World:**
-    *   **Grid Size:** 51 x 51 (include edge walls).
+    *   **Grid Size:** 101 x 101 (include edge walls).
     *   **Procedural Generation:** The map is generated using a `MazeMapGenerator` which combines Prim's algorithm for maze creation with the addition of multiple rooms to create a complex, non-uniform space.
     *   **Tile Types:**
         *   **Wall** (Black): Impassable.
@@ -25,7 +25,7 @@ A population of agents whose primary evolutionary pressure is survival time (lon
     *   **Agent Spawning:** Agents spawn at random, valid "Floor" tile locations.
 
 2.  **Power Cell Dynamics:**
-    *   A fixed number of power cells (e.g., 100) are spawned at random "Floor" locations at the start and periodically during the simulation (e.g., 5% chance each timestep to respawn all cells).
+    *   A fixed number of power cells (e.g., 256) are spawned at random "Floor" locations at the start and periodically during the simulation (e.g., 5% chance each timestep to respawn all cells).
     *   When a power cell is collected, it provides a fixed amount of energy (e.g., 25) and is consumed (the tile turns to "Floor").
 
 **II. Agent Setup:**

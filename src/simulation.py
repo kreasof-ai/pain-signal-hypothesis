@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from collections import deque
 import gc
+import time
 
 from tinygrad import Tensor, Device, dtypes, TinyJit
 from tinygrad.nn.state import get_parameters, get_state_dict, load_state_dict
@@ -617,7 +618,7 @@ if __name__ == "__main__":
     GRID_WIDTH = 101 
     GRID_HEIGHT = 101
     NUM_AGENTS = 64
-    NUM_POWER_CELLS = 100
+    NUM_POWER_CELLS = 256
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 
