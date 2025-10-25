@@ -6,6 +6,7 @@ import matplotlib.animation as animation
 from collections import deque
 import gc
 import time
+import wandb
 
 from tinygrad import Tensor, Device, dtypes, TinyJit
 from tinygrad.nn.state import get_parameters, get_state_dict, load_state_dict
@@ -128,7 +129,7 @@ class Agent:
     def __init__(self, agent_id: int, pos: tuple, initial_tile_color: tuple, config: ConvConfig, initial_weights=None):
         self.id = agent_id
         self.y, self.x = pos
-        self.energy = 100
+        self.energy = 200
         self.age = 0
         self.is_alive = True
 
@@ -187,7 +188,7 @@ class Agent:
         
         # 1. Energy Pain (inverse relationship, normalized)
         # Pain is high when energy is low.
-        pain_energy = (1.0 - (self.energy / 100.0))
+        pain_energy = (1.0 - (self.energy / 200.0))
         
         # 2. Computational Load / Effort Pain
         pain_comp = 0.0
@@ -302,7 +303,7 @@ class World:
         print("--- Initializing World ---")
         self.map_generator = MazeMapGenerator(width, height)
         self.static_map = self.map_generator.generate_new_map(
-            num_rooms=400, trap_ratio=0.05, wind_ratio=0.15
+            num_rooms=400, trap_ratio=0.02, wind_ratio=0.15
         )
         self.current_map = self.static_map.copy()
         
@@ -549,9 +550,15 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
     ax_plot.grid(True, alpha=0.3)
 
     def update(frame_num):
+        ## WANDB CHANGE: 4. Track time per step
+        start_time = time.time()
+
         # --- Run one simulation step ---
         world.step()
         
+        end_time = time.time()
+        time_per_step = end_time - start_time
+
         # --- 3. Update the Maze Visualization ---
         im.set_array(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE))
         
@@ -576,6 +583,15 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
         title_text = f"Timestep: {global_timestep} | Live Agents: {len(world.agents)}"
         ax_maze.set_title(title_text, fontsize=12)
         
+        ## WANDB CHANGE: 5. Log metrics to wandb
+        wandb.log({
+            "timestep": global_timestep,
+            "time_per_step_s": time_per_step,
+            "avg_population_age": metrics['avg_age'],
+            "oldest_living_age": metrics['max_live_age'],
+            "oldest_ever_age": metrics['oldest_ever_age'],
+        })
+
         # --- 4. Update the Age Metrics Plot ---
         timestamps.append(global_timestep)
         avg_ages.append(metrics['avg_age'])
@@ -623,13 +639,28 @@ if __name__ == "__main__":
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 
     TOTAL_SIMULATION_STEPS = 10000
-    STEPS_PER_EPISODE = 1000 # This will create animations of 1000 steps each
+    STEPS_PER_EPISODE = 100 # This will create animations of 100 steps each
     
     num_episodes = TOTAL_SIMULATION_STEPS // STEPS_PER_EPISODE
+
+    ## WANDB CHANGE: 2. Initialize wandb run
+    wandb.init(
+        project="pain-signal-hypothesis",
+        config={
+            "grid_width": GRID_WIDTH,
+            "grid_height": GRID_HEIGHT,
+            "num_agents": NUM_AGENTS,
+            "num_power_cells": NUM_POWER_CELLS,
+            "total_simulation_steps": TOTAL_SIMULATION_STEPS,
+            "steps_per_episode": STEPS_PER_EPISODE,
+        }
+    )
 
     timestamps, avg_ages, max_live_ages, oldest_ever_ages = [], [], [], []
 
     for i in range(num_episodes):
         timestamps, avg_ages, max_live_ages, oldest_ever_ages = render_episode(world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE, timestamps=timestamps, avg_ages=avg_ages, max_live_ages=max_live_ages, oldest_ever_ages=oldest_ever_ages)
 
-    print("\n--- All episodes rendered. ---")
+    ## WANDB CHANGE: 3. Finish the wandb run
+    wandb.finish()
+    print("\n--- All episodes rendered. Wandb run finished. ---")
