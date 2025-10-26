@@ -156,7 +156,6 @@ class Agent:
         self.action_history = deque([4] * 63, maxlen=63) 
         self.last_pain_signal = self.calculate_pain_signal(initial_tile_color, None, hit_a_wall=False)
 
-        # Stores tuples of (last_perception, action_idx, current_perception, tile_color, wall_hit, history_at_that_time)
         self.experience_buffer = deque(maxlen=200) 
         self.is_sleeping = False
 
@@ -238,53 +237,6 @@ class Agent:
         return action_idx
 
     @TinyJit
-    def learn(self, current_tile_color: tuple, perception_tensor: Tensor, last_perception_tensor: Tensor, action_idx: int, hit_a_wall: bool):
-        """Intra-life learning step to minimize pain. (Corrected with graph-safe conditional)"""
-        with Tensor.train():
-            self.optimizer.zero_grad()
-            
-            # Re-create the memory tensor from the state when the action was taken.
-            # Note: The *last* action in this deque is the one we are evaluating.
-            memory_tensor = Tensor([list(self.action_history)], device=Device.DEFAULT, dtype=dtypes.int32)
-            
-            # --- Forward pass from the PREVIOUS state to get the prediction and logits that led to the CURRENT state ---
-            output = self.model(last_perception_tensor, memory_tensor)
-            logits = output["logits"]
-            tile_prediction = output["prediction"]
-            
-            # --- 1. Uncertainty Loss (Supervised) ---
-            # How well did the agent predict the current view from its last view?
-            loss_uncertainty = (tile_prediction - perception_tensor).square().mean()
-
-            # --- 2. Action Loss (Reinforcement) ---
-            # The agent is rewarded for actions that reduce its pain signal.
-            current_pain = self.calculate_pain_signal(current_tile_color, action_idx, hit_a_wall)
-            pain_delta = current_pain - self.last_pain_signal
-            
-            # We only care about the logit for the action we just took.
-            action_logits = logits[0, -1, :]
-            
-            # Calculate the cross-entropy loss for the action that was actually taken.
-            ce_loss = action_logits.sparse_categorical_crossentropy(Tensor([action_idx], device=Device.DEFAULT))
-            
-            # Use Tensor.where to create a graph-safe conditional weight.
-            condition = Tensor([pain_delta], device=Device.DEFAULT) < -0.01
-            
-            # If pain decreased, the weight is 1.0 (learn from this good move). Otherwise, it's 0.0.
-            loss_weight = condition.where(1.0, 0.0)
-            
-            loss_action = (ce_loss * loss_weight).sum() # Use the graph-safe weight
-
-            # --- Combine losses and backpropagate ---
-            total_loss = loss_uncertainty + loss_action
-            
-            total_loss.backward()
-            self.optimizer.step()
-            
-            # Update the pain signal for the next step's comparison
-            self.last_pain_signal = current_pain
-
-    @TinyJit
     def _learn_from_experience_jit(self, last_perceptions_batch: Tensor, current_perceptions_batch: Tensor, actions_batch: Tensor, memory_tensor: Tensor, pain_deltas_tensor: Tensor):
         with Tensor.train():
             self.optimizer.zero_grad()
@@ -310,35 +262,36 @@ class Agent:
             self.optimizer.step()
 
     def learn_from_experience(self, batch_size: int):
+        """
+        Intra-life learning step to minimize pain, using batched experience replay.
+        This is called during the "night" or sleep phase.
+        """
         if len(self.experience_buffer) < batch_size:
-            return
+            return # Not enough memories to learn yet
 
         minibatch = random.sample(self.experience_buffer, batch_size)
         
-        # UNPACK THE NEW 6-TUPLE EXPERIENCE
-        last_perceptions, action_indices, current_perceptions, tile_colors, wall_hits, histories = zip(*minibatch)
+        # UNPACK THE NEW 6-TUPLE EXPERIENCE. We no longer need tile_colors or wall_hits here.
+        last_perceptions, action_indices, current_perceptions, last_pains, current_pains, histories = zip(*minibatch)
 
-        # --- FIX 1: Correct Tensor Shapes ---
-        # get_perception returns (1, 3, 9, 9). We just need to cat them along dim=0. No unsqueeze needed.
+        # --- Correct Tensor Creation ---
         last_perceptions_batch = Tensor.cat(*last_perceptions, dim=0)
         current_perceptions_batch = Tensor.cat(*current_perceptions, dim=0)
-        
         actions_batch = Tensor(list(action_indices), device=Device.DEFAULT, dtype=dtypes.int32).realize()
-
-        # --- FIX 2: Create the batched memory tensor with correct histories ---
         memory_tensor = Tensor(list(histories), device=Device.DEFAULT, dtype=dtypes.int32)
         
-        pain_deltas = []
-        for i in range(batch_size):
-            current_pain = self.calculate_pain_signal(tile_colors[i], action_indices[i], wall_hits[i])
-            pain_delta = current_pain - self.last_pain_signal 
-            pain_deltas.append(pain_delta)
-
+        # --- CORRECT PAIN DELTA CALCULATION ---
+        # Directly calculate the delta from the stored pain values.
+        pain_deltas = [current - last for last, current in zip(last_pains, current_pains)]
         pain_deltas_tensor = Tensor(pain_deltas, device=Device.DEFAULT).realize()
         
+        # --- Call the JIT function with the corrected data ---
         self._learn_from_experience_jit(last_perceptions_batch, current_perceptions_batch, actions_batch, memory_tensor, pain_deltas_tensor)
         
-        self.last_pain_signal = self.calculate_pain_signal(tuple(self.current_map[self.y, self.x]), None, False)
+        # --- CORRECTLY RESET THE AGENT'S PAIN SIGNAL FOR THE NEXT DAY ---
+        # After sleeping, the agent is idle. This sets the baseline for the next day's first action.
+        current_tile_after_sleep = tuple(self.current_map[self.y, self.x])
+        self.last_pain_signal = self.calculate_pain_signal(current_tile_after_sleep, 4, False) # Action 4 = idle, no wall hit
 
     def move(self, dy: int, dx: int):
         self.y += dy
@@ -397,21 +350,43 @@ class World:
             self.current_map[y, x] = COLORS["POWER_CELL"]
         print(f"Spawned {num_to_spawn} new power cells.")
 
-    def spawn_agent(self, parent_weights=None):
+    def spawn_agent(self, parent: Agent = None):
         if not self.available_spawn_points: return
+
+        spawn_pos = None
         
-        spawn_pos = tuple(random.choice(self.available_spawn_points))
-        while spawn_pos in self._agent_positions:
+        # --- NEW: Proximity Spawning Logic ---
+        if parent:
+            search_radius = 5 # Search in an 11x11 square around the parent
+            py, px = parent.y, parent.x
+            
+            nearby_spots = []
+            for r in range(-search_radius, search_radius + 1):
+                for c in range(-search_radius, search_radius + 1):
+                    ny, nx = py + r, px + c
+                    # Check if the spot is valid: within bounds, a floor, and not occupied
+                    if (0 <= ny < self.height and 0 <= nx < self.width and
+                        tuple(self.static_map[ny, nx]) == COLORS["FLOOR"] and
+                        (ny, nx) not in self._agent_positions):
+                        nearby_spots.append((ny, nx))
+            
+            if nearby_spots:
+                spawn_pos = random.choice(nearby_spots)
+                # print(f"Spawning child of {parent.id} at nearby location {spawn_pos}") # Optional: for debugging
+        
+        # --- FALLBACK: If no parent or no nearby spots, use original random logic ---
+        if spawn_pos is None:
             spawn_pos = tuple(random.choice(self.available_spawn_points))
+            while spawn_pos in self._agent_positions:
+                spawn_pos = tuple(random.choice(self.available_spawn_points))
 
         child_weights = None
-        if parent_weights:
+        if parent:
+            parent_weights = get_state_dict(parent.model)
             child_weights = {}
             for name, tensor in parent_weights.items():
-                noise_np = np.random.randn(*tensor.shape).astype(np.float32) * 0.01   # σ = 0.01
-
-                mutated_np = tensor.numpy() + noise_np                # tensor + noise
-
+                noise_np = np.random.randn(*tensor.shape).astype(np.float32) * 0.01
+                mutated_np = tensor.numpy() + noise_np
                 child_weights[name] = Tensor(mutated_np, device="CPU").realize()
         
         initial_tile_color = tuple(self.static_map[spawn_pos])
@@ -422,7 +397,6 @@ class World:
         
         self._agent_positions.add(spawn_pos)
         self.next_agent_id += 1
-        print(f"Spawned Agent {agent.id} at {spawn_pos}")
 
     def get_valid_moves(self, agent: Agent):
         valid_moves = []
@@ -467,10 +441,16 @@ class World:
                 agent.is_sleeping = False
                 agent.age += 1
                 
+                # --- NEW: Calculate pain BEFORE the action ---
+                # The "last pain" is the pain of the state the agent is currently in,
+                # resulting from its previous action.
+                last_tile_color = tuple(self.current_map[agent.y, agent.x])
+                # We assume the state we are in was not the result of a wall bump. This is a safe baseline.
+                last_pain = agent.calculate_pain_signal(last_tile_color, agent.action_history[-1], False)
+
+                # --- Existing Logic ---
                 last_perception = perceptions[agent_id]
-                
                 history_for_experience = list(agent.action_history)
-                
                 action_idx = agent.choose_action(last_perception)
                 
                 dy, dx = action_map.get(action_idx, (0, 0))
@@ -507,13 +487,20 @@ class World:
                 
                 current_perception = agent.get_perception(self.current_map)
 
-                # Store the new, complete experience in the buffer
-                agent.experience_buffer.append(
-                    (last_perception, action_idx, current_perception, tile_color, hit_a_wall, history_for_experience)
-                )
-                
                 agent.energy -= 1 
 
+                # --- NEW: Calculate pain AFTER the action ---
+                current_pain = agent.calculate_pain_signal(tile_color, action_idx, hit_a_wall)
+                
+                # Update the agent's live pain signal for metric tracking
+                agent.last_pain_signal = current_pain
+
+                # --- Store the new, correct experience tuple ---
+                current_perception = agent.get_perception(self.current_map)
+                agent.experience_buffer.append(
+                    (last_perception, action_idx, current_perception, last_pain, current_pain, history_for_experience)
+                )
+                
                 if agent.energy <= 0:
                     agent.is_alive = False
                     agents_to_remove.append(agent_id)
@@ -541,19 +528,9 @@ class World:
             surviving_agents = [a for a in self.agents.values() if a.is_alive]
             parent = None
             if surviving_agents:
-                # --- TOURNAMENT SELECTION LOGIC ---
-                # 1. Determine the size of the tournament (up to 3 contestants)
-                #    This handles the edge case where fewer than 3 agents are alive.
                 tournament_size = min(3, len(surviving_agents))
-                
-                # 2. Randomly select the contestants from the pool of survivors
                 contestants = random.sample(surviving_agents, tournament_size)
-                
-                # 3. The parent is the winner of the tournament (the one with the max age)
                 parent = max(contestants, key=lambda a: a.age)
-                # --- END OF TOURNAMENT SELECTION LOGIC ---
-            
-            parent_weights = get_state_dict(parent.model) if parent else None
 
             for agent_id in agents_to_remove:
                 dead_agent = self.agents[agent_id]
@@ -564,11 +541,11 @@ class World:
                 pos = (dead_agent.y, dead_agent.x)
                 if pos in self._agent_positions: self._agent_positions.remove(pos)
                 
-                # Respawn a new agent, inheriting from the best survivor
-                self.spawn_agent(parent_weights=parent_weights)
-                del self.agents[agent_id] # Remove the old agent from the dictionary
+                # Respawn a new agent, passing the winning parent object
+                self.spawn_agent(parent=parent)
+                del self.agents[agent_id]
 
-            gc.collect()        
+            gc.collect()       
         
         if self.is_daytime and random.random() < 0.05:
             self.spawn_power_cells()
@@ -579,10 +556,17 @@ class World:
         """Calculates and returns key metrics about the agent population."""
         live_agents = [a for a in self.agents.values() if a.is_alive]
         if not live_agents:
-            return {"avg_age": 0, "max_live_age": 0, "oldest_ever": self.oldest_agent_ever}
+            return {
+                "avg_age": 0, "max_live_age": 0, "oldest_ever": self.oldest_agent_ever,
+                "age_variance": 0, "avg_pain": 0 # NEW: Default values
+            }
             
         ages = [a.age for a in live_agents]
+        pains = [a.last_pain_signal for a in live_agents] # NEW
+
         avg_age = sum(ages) / len(ages)
+        avg_pain = sum(pains) / len(pains) # NEW
+        age_variance = np.var(ages) if len(ages) > 1 else 0 # NEW
         
         oldest_living_agent = max(live_agents, key=lambda a: a.age)
         max_live_age = oldest_living_agent.age
@@ -592,6 +576,8 @@ class World:
             "max_live_age": max_live_age,
             "oldest_ever_id": self.oldest_agent_ever,
             "oldest_ever_age": self.oldest_agent_ever_age,
+            "age_variance": age_variance, # NEW
+            "avg_pain": avg_pain # NEW
         }
 
     def get_render_frame(self, pixel_per_tile=50):
@@ -606,52 +592,67 @@ class World:
         
         return frame
     
-def render_episode(world: World, episode_num: int, num_steps: int, timestamps: List = [], avg_ages: List = [], max_live_ages: List = [], oldest_ever_ages: List = []):
+def render_episode(world: World, episode_num: int, num_steps: int, timestamps: List = [], avg_ages: List = [], max_live_ages: List = [], oldest_ever_ages: List = [], age_variances: List = [], avg_pains: List = []):
     """
-    Runs the simulation for a given number of steps and renders the output as a GIF,
-    including a side plot for population age metrics.
+    Runs the simulation and renders output, now with more detailed plots.
     """
     print(f"\n--- Starting Episode {episode_num} ---")
     
     PIXEL_PER_TILE = 50
     
-    # --- 1. Setup the Figure and Subplots using GridSpec for better layout control ---
-    fig = plt.figure(figsize=(80, 30))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.1)
+    fig = plt.figure(figsize=(24, 12))
+    # GridSpec: 2 rows, 3 columns. Maze takes up all rows in the first column.
+    gs = fig.add_gridspec(2, 3, width_ratios=[1.5, 1, 1], wspace=0.3, hspace=0.4)
     
-    ax_maze = fig.add_subplot(gs[0, 0])
-    ax_plot = fig.add_subplot(gs[0, 1])
+    ax_maze = fig.add_subplot(gs[:, 0])
+    ax_age = fig.add_subplot(gs[0, 1])
+    ax_pain = fig.add_subplot(gs[0, 2])
+    ax_variance = fig.add_subplot(gs[1, 1])
+    ax_time = fig.add_subplot(gs[1, 2]) # A plot for time per step if desired
 
+    im = ax_maze.imshow(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE), animated=True)
     ax_maze.set_xticks([])
     ax_maze.set_yticks([])
-    
-    # Initialize the image plot for the maze
-    im = ax_maze.imshow(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE), animated=True)
-    
-    # Dictionary to keep references to the text artists for agent IDs
     agent_texts = {}
 
-    ax_plot.set_title("Population Age Metrics")
-    ax_plot.set_xlabel("Timestep")
-    ax_plot.set_ylabel("Age")
-    # ax_plot.set_xscale("log")
-    line_avg, = ax_plot.plot([], [], label='Avg Age', color='cyan')
-    line_max, = ax_plot.plot([], [], label='Oldest Living', color='lime')
-    line_ever, = ax_plot.plot([], [], label='Oldest Ever', color='magenta', linestyle='--')
-    ax_plot.legend()
-    ax_plot.grid(True, alpha=0.3)
+    # Plot 1: Age Metrics
+    ax_age.set_title("Population Age")
+    ax_age.set_xlabel("Timestep")
+    ax_age.set_ylabel("Age")
+    line_avg, = ax_age.plot([], [], label='Avg Age', color='cyan')
+    line_max, = ax_age.plot([], [], label='Oldest Living', color='lime')
+    line_ever, = ax_age.plot([], [], label='Oldest Ever', color='magenta', linestyle='--')
+    ax_age.legend()
+    ax_age.grid(True, alpha=0.3)
+
+    # Plot 2: Pain Metric
+    ax_pain.set_title("Average Population Pain")
+    ax_pain.set_xlabel("Timestep")
+    ax_pain.set_ylabel("Pain Signal")
+    line_pain, = ax_pain.plot([], [], label='Avg Pain', color='red')
+    ax_pain.legend()
+    ax_pain.grid(True, alpha=0.3)
+
+    # Plot 3: Variance Metric
+    ax_variance.set_title("Population Age Variance")
+    ax_variance.set_xlabel("Timestep")
+    ax_variance.set_ylabel("Variance")
+    line_var, = ax_variance.plot([], [], label='Age Variance', color='yellow')
+    ax_variance.legend()
+    ax_variance.grid(True, alpha=0.3)
+
+    # (Optional) You can use the 4th plot for time_per_step or other metrics
+    ax_time.set_title("Processing Time")
+    ax_time.set_xlabel("Timestep")
+    ax_time.set_ylabel("Seconds per Step")
+    ax_time.grid(True, alpha=0.3)
 
     def update(frame_num):
-        ## WANDB CHANGE: 4. Track time per step
         start_time = time.time()
-
-        # --- Run one simulation step ---
         world.step()
-        
         end_time = time.time()
         time_per_step = end_time - start_time
-
-        # --- 3. Update the Maze Visualization ---
+        
         im.set_array(world.get_render_frame(pixel_per_tile=PIXEL_PER_TILE))
         
         current_agent_ids = set(world.agents.keys())
@@ -671,33 +672,40 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
             txt.set_visible(True)
 
         metrics = world.get_population_metrics()
-        global_timestep = frame_num + (episode_num - 1) * num_steps
-        title_text = f"Timestep: {global_timestep} | Live Agents: {len(world.agents)}"
-        ax_maze.set_title(title_text, fontsize=12)
+        global_timestep = world.timestep # Use world's persistent timestep
         
-        ## WANDB CHANGE: 5. Log metrics to wandb
+        # Log all metrics to wandb
         wandb.log({
             "timestep": global_timestep,
             "time_per_step_s": time_per_step,
             "avg_population_age": metrics['avg_age'],
             "oldest_living_age": metrics['max_live_age'],
             "oldest_ever_age": metrics['oldest_ever_age'],
+            "age_variance": metrics['age_variance'], # NEW LOG
+            "avg_pain": metrics['avg_pain']          # NEW LOG
         })
 
-        # --- 4. Update the Age Metrics Plot ---
+        # Update data for all plots
         timestamps.append(global_timestep)
         avg_ages.append(metrics['avg_age'])
         max_live_ages.append(metrics['max_live_age'])
         oldest_ever_ages.append(metrics['oldest_ever_age'])
-        
-        # Update the data of the line objects
+        age_variances.append(metrics['age_variance']) # NEW
+        avg_pains.append(metrics['avg_pain'])         # NEW
+
+        # Update Age Plot
         line_avg.set_data(timestamps, avg_ages)
         line_max.set_data(timestamps, max_live_ages)
         line_ever.set_data(timestamps, oldest_ever_ages)
         
-        # Rescale the plot axes
-        ax_plot.relim()
-        ax_plot.autoscale_view()
+        # Update New Plots
+        line_pain.set_data(timestamps, avg_pains)
+        line_var.set_data(timestamps, age_variances)
+
+        # Rescale all plot axes
+        for ax in [ax_age, ax_pain, ax_variance]:
+            ax.relim()
+            ax.autoscale_view()
 
         # Print progress to console
         if (frame_num + 1) % 100 == 0:
@@ -705,18 +713,17 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
                   f"Oldest Ever: {metrics['oldest_ever_age']}")
 
         # Return all animated artists
-        return [im] + list(agent_texts.values()) + [line_avg, line_max, line_ever]
+        return [im] + list(agent_texts.values()) + [line_avg, line_max, line_ever, line_pain, line_var]
 
     # --- Create and Save the Animation ---
     ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=150, blit=True, repeat=False)
     
     output_filename = f"episode_{episode_num}.gif"
-    print(f"--- Saving animation to {output_filename} ---")
     ani.save(output_filename, writer='pillow', fps=10)
     plt.close(fig)
-    print(f"--- Finished Episode {episode_num} ---")
 
-    return timestamps, avg_ages, max_live_ages, oldest_ever_ages
+    # Return the updated lists
+    return timestamps, avg_ages, max_live_ages, oldest_ever_ages, age_variances, avg_pains
 
 # --- Main Simulation and Animation Setup ---
 if __name__ == "__main__":
@@ -735,7 +742,7 @@ if __name__ == "__main__":
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 
     TOTAL_SIMULATION_STEPS = 10000
-    STEPS_PER_EPISODE = 100 # This will create animations of 100 steps each
+    STEPS_PER_EPISODE = 10 # This will create animations of 100 steps each
     
     num_episodes = TOTAL_SIMULATION_STEPS // STEPS_PER_EPISODE
 
@@ -752,10 +759,15 @@ if __name__ == "__main__":
         }
     )
 
-    timestamps, avg_ages, max_live_ages, oldest_ever_ages = [], [], [], []
+    timestamps, avg_ages, max_live_ages, oldest_ever_ages, age_variances, avg_pains = [], [], [], [], [], []
 
     for i in range(num_episodes):
-        timestamps, avg_ages, max_live_ages, oldest_ever_ages = render_episode(world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE, timestamps=timestamps, avg_ages=avg_ages, max_live_ages=max_live_ages, oldest_ever_ages=oldest_ever_ages)
+        # Pass and receive the new lists
+        timestamps, avg_ages, max_live_ages, oldest_ever_ages, age_variances, avg_pains = render_episode(
+            world, episode_num=i + 1, num_steps=STEPS_PER_EPISODE, 
+            timestamps=timestamps, avg_ages=avg_ages, max_live_ages=max_live_ages, 
+            oldest_ever_ages=oldest_ever_ages, age_variances=age_variances, avg_pains=avg_pains
+        )
 
     ## WANDB CHANGE: 3. Finish the wandb run
     wandb.finish()
