@@ -156,6 +156,10 @@ class Agent:
         self.action_history = deque([4] * 63, maxlen=63) 
         self.last_pain_signal = self.calculate_pain_signal(initial_tile_color, None, hit_a_wall=False)
 
+        # Stores tuples of (last_perception, action_idx, current_perception, tile_color, wall_hit, history_at_that_time)
+        self.experience_buffer = deque(maxlen=200) 
+        self.is_sleeping = False
+
         r, g, b = 255, random.randint(100, 200), 0
         self.color = (r, g, b)
 
@@ -280,6 +284,62 @@ class Agent:
             # Update the pain signal for the next step's comparison
             self.last_pain_signal = current_pain
 
+    @TinyJit
+    def _learn_from_experience_jit(self, last_perceptions_batch: Tensor, current_perceptions_batch: Tensor, actions_batch: Tensor, memory_tensor: Tensor, pain_deltas_tensor: Tensor):
+        with Tensor.train():
+            self.optimizer.zero_grad()
+
+            # The memory_tensor is now passed in, correctly paired with each perception
+            output = self.model(last_perceptions_batch, memory_tensor)
+            logits_batch = output["logits"]
+            prediction_batch = output["prediction"]
+
+            loss_uncertainty = (prediction_batch - current_perceptions_batch).square().mean()
+
+            action_logits_batch = logits_batch[:, -1, :]
+            ce_loss_batch = action_logits_batch.sparse_categorical_crossentropy(actions_batch)
+
+            condition = pain_deltas_tensor < -0.01
+            loss_weights = condition.where(1.0, 0.0)
+            
+            loss_action = (ce_loss_batch * loss_weights).mean()
+
+            total_loss = loss_uncertainty + loss_action
+
+            total_loss.backward()
+            self.optimizer.step()
+
+    def learn_from_experience(self, batch_size: int):
+        if len(self.experience_buffer) < batch_size:
+            return
+
+        minibatch = random.sample(self.experience_buffer, batch_size)
+        
+        # UNPACK THE NEW 6-TUPLE EXPERIENCE
+        last_perceptions, action_indices, current_perceptions, tile_colors, wall_hits, histories = zip(*minibatch)
+
+        # --- FIX 1: Correct Tensor Shapes ---
+        # get_perception returns (1, 3, 9, 9). We just need to cat them along dim=0. No unsqueeze needed.
+        last_perceptions_batch = Tensor.cat(*last_perceptions, dim=0)
+        current_perceptions_batch = Tensor.cat(*current_perceptions, dim=0)
+        
+        actions_batch = Tensor(list(action_indices), device=Device.DEFAULT, dtype=dtypes.int32).realize()
+
+        # --- FIX 2: Create the batched memory tensor with correct histories ---
+        memory_tensor = Tensor(list(histories), device=Device.DEFAULT, dtype=dtypes.int32)
+        
+        pain_deltas = []
+        for i in range(batch_size):
+            current_pain = self.calculate_pain_signal(tile_colors[i], action_indices[i], wall_hits[i])
+            pain_delta = current_pain - self.last_pain_signal 
+            pain_deltas.append(pain_delta)
+
+        pain_deltas_tensor = Tensor(pain_deltas, device=Device.DEFAULT).realize()
+        
+        self._learn_from_experience_jit(last_perceptions_batch, current_perceptions_batch, actions_batch, memory_tensor, pain_deltas_tensor)
+        
+        self.last_pain_signal = self.calculate_pain_signal(tuple(self.current_map[self.y, self.x]), None, False)
+
     def move(self, dy: int, dx: int):
         self.y += dy
         self.x += dx
@@ -306,6 +366,9 @@ class World:
             num_rooms=400, trap_ratio=0.02, wind_ratio=0.15
         )
         self.current_map = self.static_map.copy()
+
+        self.timestep = 0
+        self.is_daytime = True
         
         self.available_spawn_points = self._get_floor_tiles()
         
@@ -373,78 +436,107 @@ class World:
         return valid_moves
 
     def step(self):
+        # --- 1. Day/Night Cycle Management ---
+        self.timestep += 1
+        cycle_time = self.timestep % (DAY_LENGTH + NIGHT_LENGTH)
+        
+        if self.is_daytime and cycle_time >= DAY_LENGTH:
+            self.is_daytime = False
+            print(f"\n--- Timestep {self.timestep}: Night has fallen. Agents are sleeping and learning. ---")
+        elif not self.is_daytime and cycle_time < DAY_LENGTH:
+            self.is_daytime = True
+            print(f"\n--- Timestep {self.timestep}: Day has broken. Agents are waking up. ---")
+
         agents_to_remove = []
         action_map = {0: (-1, 0), 1: (1, 0), 2: (0, -1), 3: (0, 1), 4: (0, 0)} # up, down, left, right, idle
-        WALL_BUMP_PENALTY = 5 # Extra energy cost for hitting a wall
+        WALL_BUMP_PENALTY = 5 
         
-        # --- Cache perceptions for all agents first ---
-        perceptions = {
-            agent_id: agent.get_perception(self.current_map) 
-            for agent_id, agent in self.agents.items()
-        }
+        # Pass the current map to agent methods that need it for state access
+        for agent in self.agents.values():
+            agent.current_map = self.current_map 
 
-        for agent_id, agent in self.agents.items():
-            if not agent.is_alive: continue
-            agent.age += 1
-            
-            last_perception = perceptions[agent_id]
-            action_idx = agent.choose_action(last_perception)
-            
-            dy, dx = action_map.get(action_idx, (0, 0))
-            
-            # --- Collision Detection and Penalty Logic ---
-            ny, nx = agent.y + dy, agent.x + dx
-            hit_a_wall = False
-            
-            # Check if the INTENDED move is invalid
-            if not (0 <= ny < self.height and 0 <= nx < self.width and
-                    not np.array_equal(self.current_map[ny, nx], COLORS["WALL"]) and
-                    (ny, nx) not in self._agent_positions):
+        if self.is_daytime:
+            # --- DAYTIME: Agents act and collect experience ---
+            perceptions = {
+                agent_id: agent.get_perception(self.current_map) 
+                for agent_id, agent in self.agents.items()
+            }
+
+            for agent_id, agent in self.agents.items():
+                if not agent.is_alive: continue
+                agent.is_sleeping = False
+                agent.age += 1
                 
-                # If the intended move was not to stay idle, it's a bump
-                if action_idx != 4:
-                    hit_a_wall = True
-                    agent.energy -= WALL_BUMP_PENALTY
-
-                # Invalidate move, force idle
-                dy, dx = 0, 0 
-                # Note: We don't change action_idx, so the agent learns from its *intended* bad action
-
-            self._agent_positions.remove((agent.y, agent.x))
-            agent.move(dy, dx) # This will be (0,0) if the move was invalid
-            self._agent_positions.add((agent.y, agent.x))
-            agent.action_history.append(action_idx)
-
-            tile_color = tuple(self.current_map[agent.y, agent.x])
-            
-            if tile_color == COLORS["TRAP"]:
-                agent.is_alive = False
-                print(f"Agent {agent.id} stepped on a trap at ({agent.y}, {agent.x}) and died.")
-                agents_to_remove.append(agent_id)
-                continue
-
-            if tile_color == COLORS["WIND"]:
-                agent.energy -= 10 # Extra energy drain
-            
-            if tile_color == COLORS["POWER_CELL"]:
-                agent.energy += 25
-                self.current_map[agent.y, agent.x] = COLORS["FLOOR"]
-                print(f"Agent {agent.id} consumed a power cell.")
-            
-            current_perception = agent.get_perception(self.current_map)
-
-            # Enable the now-fixed intra-agent learning, passing the collision flag
-            agent.learn(tile_color, current_perception, last_perception, action_idx, hit_a_wall)
-            
-            agent.energy -= 1 # Base energy cost per step
-
-            if agent.energy <= 0:
-                agent.is_alive = False
-                print(f"Agent {agent.id} ran out of energy and died.")
-                agents_to_remove.append(agent_id)
-
-            gc.collect()
+                last_perception = perceptions[agent_id]
                 
+                history_for_experience = list(agent.action_history)
+                
+                action_idx = agent.choose_action(last_perception)
+                
+                dy, dx = action_map.get(action_idx, (0, 0))
+                
+                ny, nx = agent.y + dy, agent.x + dx
+                hit_a_wall = False
+                
+                if not (0 <= ny < self.height and 0 <= nx < self.width and
+                        not np.array_equal(self.current_map[ny, nx], COLORS["WALL"]) and
+                        (ny, nx) not in self._agent_positions):
+                    if action_idx != 4:
+                        hit_a_wall = True
+                        agent.energy -= WALL_BUMP_PENALTY
+                    dy, dx = 0, 0 
+                
+                self._agent_positions.remove((agent.y, agent.x))
+                agent.move(dy, dx)
+                self._agent_positions.add((agent.y, agent.x))
+                
+                agent.action_history.append(action_idx)
+
+                tile_color = tuple(self.current_map[agent.y, agent.x])
+                
+                # Check for death conditions
+                if tile_color == COLORS["TRAP"]:
+                    agent.is_alive = False
+                    agents_to_remove.append(agent_id)
+                    continue
+
+                if tile_color == COLORS["WIND"]: agent.energy -= 10
+                if tile_color == COLORS["POWER_CELL"]:
+                    agent.energy += 25
+                    self.current_map[agent.y, agent.x] = COLORS["FLOOR"]
+                
+                current_perception = agent.get_perception(self.current_map)
+
+                # Store the new, complete experience in the buffer
+                agent.experience_buffer.append(
+                    (last_perception, action_idx, current_perception, tile_color, hit_a_wall, history_for_experience)
+                )
+                
+                agent.energy -= 1 
+
+                if agent.energy <= 0:
+                    agent.is_alive = False
+                    agents_to_remove.append(agent_id)
+
+        else:
+            # --- NIGHTTIME: Agents sleep and learn ---
+            for agent_id, agent in self.agents.items():
+                if not agent.is_alive: continue
+                agent.is_sleeping = True
+                
+                # Learn from a batch of memories
+                agent.learn_from_experience(batch_size=BATCH_SIZE)
+                
+                # Small energy cost to survive the night
+                agent.energy -= 0.25 
+
+                if agent.energy <= 0:
+                    agent.is_alive = False
+                    agents_to_remove.append(agent_id)
+
+        gc.collect()
+                
+        # --- Agent Respawn Logic (remains the same) ---
         if agents_to_remove:
             surviving_agents = [a for a in self.agents.values() if a.is_alive]
             parent = None
@@ -476,9 +568,9 @@ class World:
                 self.spawn_agent(parent_weights=parent_weights)
                 del self.agents[agent_id] # Remove the old agent from the dictionary
 
-            gc.collect()
-            
-        if random.random() < 0.05: # 5% chance each step to respawn all cells
+            gc.collect()        
+        
+        if self.is_daytime and random.random() < 0.05:
             self.spawn_power_cells()
 
         gc.collect()
@@ -524,7 +616,7 @@ def render_episode(world: World, episode_num: int, num_steps: int, timestamps: L
     PIXEL_PER_TILE = 50
     
     # --- 1. Setup the Figure and Subplots using GridSpec for better layout control ---
-    fig = plt.figure(figsize=(30, 10))
+    fig = plt.figure(figsize=(80, 30))
     gs = fig.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.1)
     
     ax_maze = fig.add_subplot(gs[0, 0])
@@ -635,6 +727,10 @@ if __name__ == "__main__":
     GRID_HEIGHT = 101
     NUM_AGENTS = 64
     NUM_POWER_CELLS = 256
+
+    DAY_LENGTH = 16
+    NIGHT_LENGTH = 4
+    BATCH_SIZE = 8 # Number of memories to learn from each night
 
     world = World(width=GRID_WIDTH, height=GRID_HEIGHT, num_agents=NUM_AGENTS, num_power_cells=NUM_POWER_CELLS)
 

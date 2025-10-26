@@ -134,7 +134,7 @@ class AgentModel:
         h = self.embed_tokens(memory) # encode action histories into embedding
         bsz, seq_len, dim = h.shape
 
-        assert bsz == 1 # only support single batch size for single agent
+        # assert bsz == 1 # only support single batch size for single agent
         assert seq_len == 63 # memory length should be 63, if action histories less than 63 the earlier is filled with idle action
 
         perception = perception.reshape(bsz, 1, dim)
@@ -145,7 +145,7 @@ class AgentModel:
 
         action_hidden_states = hidden_states[:, -1, :]
 
-        prediction = self.decoder(perception + action_hidden_states) # Next 9x9 tiles prediction based on potential chosen action
+        prediction = self.decoder(perception.squeeze(1) + action_hidden_states) # Next 9x9 tiles prediction based on potential chosen action
 
         logits = self.lm_head(hidden_states)
         
